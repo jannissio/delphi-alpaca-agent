@@ -51,19 +51,26 @@ entry_windows_et:
   "2026-09-04": []                                          # Fri: NO_TRADE (NFP 08:30 ET), logged decision
 no_new_entry_after_et: "14:00"     # F1 E-V19: last hour is where realised skew dominates
 
-# Conformal Condor (research/G_conformal_condor.md; agent/core/conformal.py). Enabled 2026-09-03.
-# Short strikes = split-conformal interval on the ratio |move| / VIX-implied move (calibration window of
-# trailing sessions, adaptive alpha via ACI, Gibbs & Candes 2021). Gate 31 trades only when the market
-# pays more for the interval than the calibration says it is worth: credit/wing - P_mid >= margin.
-# All numbers below were fixed before the first live session under this rule; none is tuned on live data.
+# Conformal Risk Control Condor (docs/THEORY.md; research/G_conformal_condor.md; agent/core/conformal.py).
+# Enabled 2026-09-03. Short strikes = radius at which the *expected payout to the buyer* is certified to be
+# at most beta of the wing (conformal risk control, Angelopoulos et al. ICLR 2024; online step = Rolling RC,
+# Feldman et al. TMLR 2023). Gate 31 trades only when the market pays more than the certified payout plus a
+# margin: credit/wing - beta_cert >= margin, which implies E[payoff] >= margin x wing under exchangeability.
+# The coverage track (alpha, ACI) is kept as the logged counterfactual. All numbers below were fixed before
+# the first live session under this rule; none is tuned on live data.
 conformal:
   enabled: true
-  alpha_target: 0.20               # 80 % coverage interval
-  gamma: 0.005                     # ACI step (G section 4.2); fixed, not fitted
+  rule: crc                        # crc = risk track sets strikes and gate; coverage = the research/G variant
+  beta_target: 0.10                # expected payout to the buyer <= 10 % of the wing
+  beta_lo: 0.02
+  beta_hi: 0.30
+  alpha_target: 0.20               # coverage track: 80 % interval (counterfactual)
+  gamma: 0.005                     # online step for both tracks; fixed, not fitted
   window: 250                      # trailing calibration scores (about one year of sessions)
   k_min: 0.35                      # tradability clip on the radius, in implied-move units; logged when it binds
   k_max: 1.60
-  margin: 0.05                     # 5 probability points ~ $20/contract at a $4 wing ~ four legs round trip at one tick
+  margin: 0.05                     # 5 % of the wing ~ $20/contract at a $4 wing ~ four legs round trip at one tick
+  wing_pct_of_spot: 0.005          # omega = wing / implied move uses the strategy wing; this is the fallback
   horizon: ratio_1030              # history column: 10:30 ET anchor to the close (scripts/history_data.py)
   min_scores: 50
 

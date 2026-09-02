@@ -137,24 +137,27 @@ th{{color:var(--muted);font-weight:600}} .ok{{color:var(--ok)}} .no{{color:var(-
         parts.append(f"<div class='muted'>last chain: {c.get('contracts')} contracts, {c.get('quotable')} quotable, feed Greeks {c.get('feed_greeks')}, model Greeks {c.get('model_greeks')}</div>")
     parts.append("<h2>Conformal Condor: P versus Q (gate 31)</h2>")
     if conf_iv or conf_led or conf_eod:
-        parts.append("<div class='muted'>Q_mid = credit / wing from the quote (risk-neutral probability of finishing beyond the spread midpoint); "
-                     "P_mid = conformal p-value of the same distance in the trailing calibration scores; trade iff Q_mid &minus; P_mid &ge; margin.</div>")
-        rows = [[r["ts"][:16], r["session"]["date"], f"{r['session']['alpha_t']:.4f}", r["session"]["n"], f"{r['session']['k']:.3f}",
+        parts.append("<div class='muted'>credit / wing is the market's price of the band (Breeden-Litzenberger); the certified payout is the conformal-risk-control bound "
+                     "on the expected payout to the buyer (beta* = 0.10, strikes at or beyond the certified radius); trade iff credit/wing &minus; beta* &ge; margin, "
+                     "which implies E[payoff] &ge; margin &times; wing under exchangeability (docs/THEORY.md).</div>")
+        rows = [[r["ts"][:16], r["session"]["date"], r["session"].get("rule"), f"{r['session'].get('beta_t', 0):.4f}", f"{r['session'].get('k_crc', 0):.3f}",
+                 f"{r['session']['alpha_t']:.4f}", f"{r['session'].get('k_cov', 0):.3f}", r["session"]["n"], f"{r['session']['k']:.3f}",
                  r["session"]["vix_prev"], f"{r['session']['impl_ref_usd']:.2f}", r["session"]["spot_entry"]] for r in conf_iv]
-        parts.append(table(rows, ["committed (UTC)", "session", "alpha_t", "n", "k", "VIX prev", "implied ref move $", "anchor spot"]) if rows else "")
+        parts.append(table(rows, ["committed (UTC)", "session", "rule", "beta_t", "k_crc", "alpha_t", "k_cov", "n", "k used", "VIX prev", "implied ref move $", "anchor spot"]) if rows else "")
         agg: dict = {}
         for r in conf_led:
             l, c, cf = r["ledger"], r["candidate"], r.get("counterfactual_fixed") or {}
             key = (r.get("session"), c["short_put"], c["short_call"], bool(l["passes"]))
             a = agg.setdefault(key, {"first": r["ts"][11:16], "last": r["ts"][11:16], "n": 0, "gap": [], "q": [], "p": [], "cf": cf.get("gap")})
-            a["last"] = r["ts"][11:16]; a["n"] += 1; a["gap"].append(l["gap"]); a["q"].append(l["q_mid"]); a["p"].append(l["p_mid"])
+            a["last"] = r["ts"][11:16]; a["n"] += 1; a["gap"].append(l["gap"]); a["q"].append(l["q_mid"]); a["p"].append(l.get("beta_empirical", l["p_mid"]))
         rows = [[s, f"{a['first']}-{a['last']}", a["n"], f"{sp:.0f}/{sc:.0f}", f"{sum(a['q']) / a['n']:.3f}", f"{sum(a['p']) / a['n']:.3f}",
                  f"{min(a['gap']):+.3f}..{max(a['gap']):+.3f}", "<span class='ok'>TRADE</span>" if ok else "<span class='no'>NO_TRADE</span>",
                  "-" if a["cf"] is None else f"{a['cf']:+.3f}"] for (s, sp, sc, ok), a in agg.items()]
-        parts.append("<div class='wrap'>" + (table(rows, ["session", "UTC", "n", "shorts", "Q_mid", "P_mid", "gap", "decision", "fixed-rule gap"]) if rows else "<div class='muted'>no candidate evaluated under the conformal rule yet</div>") + "</div>")
-        rows = [[r["record"]["date"], f"{r['record']['ratio']:.3f}", f"{r['record']['k']:.3f}", "outside" if r["record"]["err"] else "inside",
+        parts.append("<div class='wrap'>" + (table(rows, ["session", "UTC", "n", "shorts", "credit/wing (Q)", "empirical payout at strikes (P)", "gate gap vs beta*", "decision", "fixed-rule gap"]) if rows else "<div class='muted'>no candidate evaluated under the conformal rule yet</div>") + "</div>")
+        rows = [[r["record"]["date"], f"{r['record']['ratio']:.3f}", f"{r['record']['k']:.3f}", f"{r['record'].get('loss', 0):.3f}",
+                 f"{r['record'].get('beta_before', 0):.4f} &rarr; {r['record'].get('beta_after', 0):.4f}", "outside" if r["record"]["err"] else "inside",
                  f"{r['record']['alpha_before']:.4f} &rarr; {r['record']['alpha_after']:.4f}"] for r in conf_eod]
-        parts.append(table(rows, ["session", "realised ratio", "k", "result", "alpha update"]) if rows else "")
+        parts.append(table(rows, ["session", "realised ratio", "k", "payout ratio", "beta update", "coverage", "alpha update"]) if rows else "")
     else:
         parts.append("<div class='muted'>enabled from 2026-09-03; no conformal records yet</div>")
     parts.append("<h2>Journal (last entries)</h2>")

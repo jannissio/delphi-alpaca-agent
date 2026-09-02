@@ -24,7 +24,7 @@ from agent.core.models import (BookPosition, CondorCandidate, CriticVerdict, Opt
 from agent.core.regime_model import RegimeModel
 from agent.core.sizing import Budget, contracts_for, regime_multiplier
 from agent.core import conformal as conf_mod
-from agent.core.strategy import (StrategyError, atm_iv, build_condor, implied_event_move, package_tick,
+from agent.core.strategy import (StrategyError, atm_iv, build_condor, implied_event_move, package_tick, wing_width_for,
                                  realized_vol_annualized, straddle_implied_vol_annualized)
 from agent.data import cboe
 from agent.data.alpaca_data import AlpacaData
@@ -218,7 +218,9 @@ class Agent:
             return st.session
         try:
             vix_prev = cboe.closes_before("VIX", today, 1)[-1]
-            sess = conf_mod.open_session(st, p, today, now, spot, vix_prev)
+            ucfg = self.s.underlying_cfg(self.s.enabled_underlyings()[0])
+            wing = wing_width_for(spot, self.s.strategy["structure"], float(ucfg["strike_increment"]))
+            sess = conf_mod.open_session(st, p, today, now, spot, vix_prev, wing_usd=wing)
             st.save(self.conformal_path)
         except Exception as exc:
             self.audit.write("conformal_error", error=f"interval: {str(exc)[:200]}")
@@ -269,7 +271,9 @@ class Agent:
             if not (st.session and st.session.get("date") == today.isoformat()):
                 p_entry = next(b["close"] for b in bars if b["et"] == "10:00")
                 vix_prev = cboe.closes_before("VIX", today, 1)[-1]
-                conf_mod.open_session(st, p, today, now, p_entry, vix_prev, reconstructed=True)
+                wing = wing_width_for(p_entry, self.s.strategy["structure"],
+                                      float(self.s.underlying_cfg(underlying)["strike_increment"]))
+                conf_mod.open_session(st, p, today, now, p_entry, vix_prev, wing_usd=wing, reconstructed=True)
             rec = conf_mod.eod_update(st, p, close, today)
             st.save(self.conformal_path)
         except Exception as exc:

@@ -10,21 +10,22 @@ has a source in `research/` or in `state/audit.jsonl`.
    (Carr & Wu 2009); 0DTE condor mean ~0 after costs, 45 % losing days (Vilkov 2026); with three
    observations the Probabilistic Sharpe Ratio cannot reach 95 % for fat tails (Bailey & Lopez de Prado).
    So we optimise what the judges can actually verify: process, technology, explanation.
-3. **What we trade and why: the Conformal Condor.** A condor's short strikes are a prediction interval for the
-   close. We build it by split conformal prediction on |move| / implied move (coverage 80 % by construction,
-   adaptive alpha after every session, Gibbs & Candes 2021), read the market's price of the same interval off
-   the quote (credit / wing = risk-neutral probability of finishing outside, Breeden & Litzenberger 1978), and
-   sell only when the market pays more than the calibration says it is worth, by a 5-point cost margin. One
-   line, no free parameter. Wings max($3, 0.5 % of spot), always bought. Windows Wed/Thu mornings; Friday
-   NO_TRADE (NFP 08:30 ET). Flat by 15:15 ET. The pilot day (Wed) ran the fixed 1.10x rule; it stays as the
-   logged counterfactual.
+3. **What we trade and why: the Conformal Risk Control Condor.** A condor's payout to its buyer is a bounded loss
+   that falls with the interval's radius. Conformal risk control (ICLR 2024) gives the smallest radius at which
+   the expected payout is certified, in finite samples, to be at most 10 % of the wing. The market's price of the
+   same interval is credit / wing (Breeden & Litzenberger 1978). Sell only if the market pays 0.10 + 0.05, and
+   the theorem says: expected payoff at least 5 % of the wing, per package. One line, no free parameter; the
+   online level (TMLR 2023) may only tighten. Wings max($3, 0.5 % of spot), always bought. Windows Wed/Thu
+   mornings; Friday NO_TRADE (NFP 08:30 ET). Flat by 15:15 ET. The pilot day (Wed) ran the fixed 1.10x rule;
+   it stays as the logged counterfactual. Show the three-line proof on the slide.
 4. **Trained on history, allowed only to brake, and honest about it.** 9,230 sessions (S&P 500 since 1975,
    VIX since 1990, SPY open/close from 2020-07, 30-minute bars from 2024). Logistic regime model,
    expanding-window validation; multiplier 1 / 0.5 / 0. Negative results on the slide: on the live 10:30
    horizon the logit is worse than a constant (two year-blocks, no inference); XGBoost, LightGBM and two
    2025/26 tabular foundation models (TabPFN v2, TabICL v2) tested under the same protocol, none beats twelve
-   coefficients where there is power; 21 configurations disclosed. Conformal back-fill: coverage 0.806 over
-   618 sessions vs the 0.80 target, by year 0.83 / 0.80 / 0.78 while the fixed rule drifts 0.77 / 0.79 / 0.86.
+   coefficients where there is power; 21 configurations disclosed. Back-fill of the certified radius: realised payout ratio 0.079
+   over 618 sessions vs the 0.10 certificate, by year 0.070 / 0.079 / 0.090, while the fixed rule drifts
+   0.119 / 0.113 / 0.073.
    Random-entry Monte Carlo null for the campaign: median +259, P05 -503 dollars.
 5. **The LLM decides categories, code decides numbers.** Regime enums, veto, critic PASS/REDUCE/BLOCK,
    journal. Tickers and dates masked (Glasserman & Lin). Three votes must agree, otherwise NO_TRADE.

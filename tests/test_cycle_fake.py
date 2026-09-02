@@ -147,8 +147,11 @@ REGIME_OK = {"RegimeSchema": {"vol_regime": "low", "trend": "chop", "event_risk"
              "JournalSchema": {"entry": "fake entry", "lesson": ""}}
 
 
-@pytest.fixture
-def agent(tmp_path, monkeypatch):
+def build_agent(state_dir, monkeypatch, payloads=None):
+    """An agent wired to fakes, with its state in state_dir and an LLM that returns `payloads`."""
+    payloads = payloads or REGIME_OK
+    state_dir.mkdir(parents=True, exist_ok=True)
+    tmp_path = state_dir
     monkeypatch.setattr(main_mod, "STATE_DIR", tmp_path)
     monkeypatch.setattr(main_mod, "datetime", FakeClock)
     monkeypatch.setattr(main_mod.cboe, "fetch_term_structure",
@@ -173,10 +176,15 @@ def agent(tmp_path, monkeypatch):
 
     ag.walker.sleep = fake_sleep
     ag.walker.now = lambda: mono["t"]
-    ag.strong = FakeProvider("fake-strong", REGIME_OK)
-    ag.cheap = FakeProvider("fake-cheap", REGIME_OK)
+    ag.strong = FakeProvider("fake-strong", payloads)
+    ag.cheap = FakeProvider("fake-cheap", payloads)
     ag.journal.provider = ag.cheap
     return ag
+
+
+@pytest.fixture
+def agent(tmp_path, monkeypatch):
+    return build_agent(tmp_path, monkeypatch, REGIME_OK)
 
 
 def _kinds(ag):
@@ -293,3 +301,29 @@ def test_friday_is_no_trade(agent):
         assert "no_trade" in kinds and "execute_start" not in kinds and "llm_regime" not in kinds
     finally:
         FakeClock.current = datetime(2026, 9, 2, 10, 20, tzinfo=ET).astimezone(timezone.utc)
+
+
+def test_candidate_is_byte_identical_across_llm_outputs(tmp_path, monkeypatch):
+    """The LLM can only veto. Two agents whose models tell different stories (different enums, different prose,
+    numbers in the rationale) and do not veto must produce the byte-identical order: strikes, wings, credit, contracts,
+    ladder and collar. The numbers never pass through the model."""
+    other = {**REGIME_OK,
+             "RegimeSchema": {**REGIME_OK["RegimeSchema"], "vol_regime": "normal", "trend": "up", "event_risk": "none",
+                              "rationale": "an entirely different narrative citing 3 catalysts, a 9.9 % move and a 0.55 delta"},
+             "CriticSchema": {"verdict": "PASS", "reason": "different words, same verdict"}}
+    execs, gates = [], []
+    for name, payloads in (("a", REGIME_OK), ("b", other)):
+        ag = build_agent(tmp_path / name, monkeypatch, payloads)
+        ag.walker.trading.fill_at_rung = None
+        ag.cycle()
+        recs = ag.audit.read_all()
+        execs.append([r for r in recs if r["kind"] == "execute_start"][-1])
+        gates.append([r for r in recs if r["kind"] == "gates"][-1])
+        # the stories really were different
+        reg = [r for r in recs if r["kind"] == "llm_regime"][-1]
+        assert reg["decision"]["rationale"] == payloads["RegimeSchema"]["rationale"]
+    strip = lambda r: {k: v for k, v in r.items() if k not in ("ts",)}  # noqa: E731
+    assert json.dumps(strip(execs[0])["candidate"], sort_keys=True) == json.dumps(strip(execs[1])["candidate"], sort_keys=True)
+    assert execs[0]["prices"] == execs[1]["prices"] and execs[0]["collar"] == execs[1]["collar"]
+    assert json.dumps(gates[0]["candidate"], sort_keys=True) == json.dumps(gates[1]["candidate"], sort_keys=True)
+    assert [g["passed"] for g in gates[0]["results"]] == [g["passed"] for g in gates[1]["results"]]

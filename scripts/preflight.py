@@ -22,7 +22,7 @@ from agent.core.config import ROOT, Settings  # noqa: E402
 from agent.core.models import SessionState  # noqa: E402
 from agent.core.sizing import Budget, contracts_for, regime_multiplier  # noqa: E402
 from agent.core.strategy import (StrategyError, atm_iv, build_condor, implied_event_move, package_tick,  # noqa: E402
-                                 realized_vol_annualized, straddle_implied_vol_annualized)
+                                 realized_vol_annualized, straddle_implied_vol_annualized, wing_width_for)
 from agent.data import cboe  # noqa: E402
 from agent.data.alpaca_data import AlpacaData  # noqa: E402
 from agent.data.calendar import flags_for, upcoming_for_prompt  # noqa: E402
@@ -72,11 +72,14 @@ def main() -> None:
                 print("== conformal interval committed earlier today:", json.dumps(sess))
             else:
                 vix_prev = cboe.closes_before("VIX", today, 1)[-1]
-                sess = conf_mod.open_session(st, cp, today, now, spot, vix_prev)
-            print(f"== conformal interval: alpha_t {sess['alpha_t']:.4f}, n {sess['n']}, k {sess['k']:.3f} "
-                  f"(raw {sess['k_raw']:.3f}, clipped {sess['clipped']}), VIX prev {sess['vix_prev']}, implied ref move "
-                  f"{sess['impl_ref_usd']:.2f} $ ({sess['impl_ref_pct']:.3f} %) -> short distance {sess['k'] * sess['impl_ref_usd']:.2f} $; "
-                  f"state through {st.updated_through}")
+                wing = wing_width_for(spot, s.strategy["structure"], float(s.underlying_cfg("SPY")["strike_increment"]))
+                sess = conf_mod.open_session(st, cp, today, now, spot, vix_prev, wing_usd=wing)
+            print(f"== conformal interval ({sess['rule']}): n {sess['n']}, VIX prev {sess['vix_prev']}, implied ref move "
+                  f"{sess['impl_ref_usd']:.2f} $ ({sess['impl_ref_pct']:.3f} %), wing {sess['wing_usd']:.0f} $ -> omega {sess['omega']:.3f}; "
+                  f"risk track beta* {sess['beta_star']} -> k_crc_fixed {sess['k_crc_fixed']:.3f}, beta_t {sess['beta_t']:.4f} -> "
+                  f"k_crc_adaptive {sess['k_crc_adaptive']:.3f}, used k_crc {sess['k_crc']:.3f}; "
+                  f"coverage track alpha_t {sess['alpha_t']:.4f} -> k_cov {sess['k_cov']:.3f}; chosen k {sess['k']:.3f} "
+                  f"(clipped {sess['clipped']}) -> short distance {sess['k'] * sess['impl_ref_usd']:.2f} $; state through {st.updated_through}")
         except Exception as exc:
             print("== CONFORMAL STATE UNAVAILABLE (the agent would log NO_TRADE):", str(exc)[:200])
     short_distance = sess["k"] * sess["impl_ref_usd"] if sess else None
@@ -91,8 +94,12 @@ def main() -> None:
         led = conf_mod.ledger_for_candidate(cand, st, cp, sess)
         cand.extras["conformal"] = led
         k = led["kelly"]
-        print(f"== P vs Q: Q_mid {led['q_mid']:.3f} (call {led['q_call']:.3f}, put {led['q_put']:.3f}) vs P_mid {led['p_mid']:.3f}; "
-              f"gap {led['gap']:+.3f} vs margin {led['margin']} -> {'TRADE' if led['passes'] else 'NO_TRADE'}")
+        print(f"== P vs Q ({led['rule']}): credit/wing {led['q_mid']:.3f} (call {led['q_call']:.3f}, put {led['q_put']:.3f}) vs certified payout "
+              f"beta* {led['beta_certified']} (empirical {led['beta_empirical']:.3f}) at k_eff {led['k_effective']:.3f} (certified_ok {led['certified_ok']}); "
+              f"gap_crc {led['gap_crc']:+.3f}, gap_empirical {led['gap_empirical']:+.3f}, "
+              f"gap_cov {led['gap_cov']:+.3f} (P_mid {led['p_mid']:.3f}); gate gap {led['gap']:+.3f} vs margin {led['margin']} -> "
+              f"{'TRADE' if led['passes'] else 'NO_TRADE'}; EV lower bound {led['ev_lower_bound_usd_per_package']} $/package, "
+              f"empirical EV {led['ev_empirical_usd_per_package']:+.1f} $/package")
         print(f"   P_short {led['p_short']:.3f} (alpha_t {led['alpha_t']:.3f}, k_eff {led['k_effective']:.3f}), strict gap {led['strict_gap']:+.3f}; "
               f"EV digital {led['ev_digital_usd_per_package']:+.1f} $/package, EV hist {led['ev_hist_usd_per_package']}; "
               f"break-even p_inside {led['break_even_p_inside']}; deltas {led['delta_short_call']}/{led['delta_short_put']}")

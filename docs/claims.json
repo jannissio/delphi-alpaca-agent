@@ -1,0 +1,94 @@
+{
+ "backfill.sessions_in_history": {
+  "expected": 668,
+  "tol": 0.0
+ },
+ "backfill.first_session": {
+  "expected": "2024-01-02",
+  "tol": 0.0
+ },
+ "backfill.last_session": {
+  "expected": "2026-09-01",
+  "tol": 0.0
+ },
+ "backfill.calibrated_sessions": {
+  "expected": 618,
+  "tol": 0.0
+ },
+ "backfill.coverage_all": {
+  "expected": 0.8058252427184466,
+  "tol": 1e-06
+ },
+ "backfill.realized_payout_ratio_all": {
+  "expected": 0.07921749222153172,
+  "tol": 1e-06
+ },
+ "backfill.beta_t_final": {
+  "expected": 0.16421794903546702,
+  "tol": 1e-06
+ },
+ "backfill.alpha_t_final": {
+  "expected": 0.21800000000000003,
+  "tol": 1e-06
+ },
+ "backfill.fixed_rule_coverage_all": {
+  "expected": 0.8025889967637541,
+  "tol": 1e-06
+ },
+ "backfill.fixed_rule_payout_ratio_all": {
+  "expected": 0.10390435253427995,
+  "tol": 1e-06
+ },
+ "backfill.coverage_2024": {
+  "expected": 0.8316831683168316,
+  "tol": 1e-06
+ },
+ "backfill.realized_payout_ratio_2024": {
+  "expected": 0.07033064230225462,
+  "tol": 1e-06
+ },
+ "backfill.fixed_rule_coverage_2024": {
+  "expected": 0.7722772277227723,
+  "tol": 1e-06
+ },
+ "backfill.fixed_rule_payout_ratio_2024": {
+  "expected": 0.11881561676390316,
+  "tol": 1e-06
+ },
+ "backfill.coverage_2025": {
+  "expected": 0.7991967871485943,
+  "tol": 1e-06
+ },
+ "backfill.realized_payout_ratio_2025": {
+  "expected": 0.07911356002142131,
+  "tol": 1e-06
+ },
+ "backfill.fixed_rule_coverage_2025": {
+  "expected": 0.7871485943775101,
+  "tol": 1e-06
+ },
+ "backfill.fixed_rule_payout_ratio_2025": {
+  "expected": 0.11262203079731742,
+  "tol": 1e-06
+ },
+ "backfill.coverage_2026": {
+  "expected": 0.7844311377245509,
+  "tol": 1e-06
+ },
+ "backfill.realized_payout_ratio_2026": {
+  "expected": 0.09012182037435489,
+  "tol": 1e-06
+ },
+ "backfill.fixed_rule_coverage_2026": {
+  "expected": 0.8622754491017964,
+  "tol": 1e-06
+ },
+ "backfill.fixed_rule_payout_ratio_2026": {
+  "expected": 0.07286975815176366,
+  "tol": 1e-06
+ },
+ "tests.count": {
+  "expected": 33,
+  "tol": 0.0
+ }
+}

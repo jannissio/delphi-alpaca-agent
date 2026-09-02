@@ -233,13 +233,20 @@ class GateEngine:
                 out.append(_no("gate_coverage", "conformal ledger missing for this candidate", None, margin))
             elif any("non-positive" in w for w in led.get("warnings", [])):
                 out.append(_no("gate_coverage", "; ".join(led["warnings"])[:200], round(led["gap"], 4), margin))
-            elif led["gap"] >= margin - 1e-12:
-                out.append(_ok("gate_coverage", f"Q_mid {led['q_mid']:.3f} - P_mid {led['p_mid']:.3f} = "
-                                                f"{led['gap']:+.3f} >= margin {margin:.2f}", round(led["gap"], 4), margin))
+            elif led.get("rule") == "crc" and not led.get("certified_ok", True):
+                out.append(_no("gate_coverage", "short strike inside the radius certified at beta*; no certificate, no trade",
+                               round(led.get("k_effective", 0), 4), round(led.get("k_crc_fixed", 0), 4)))
             else:
-                out.append(_no("gate_coverage", f"Q_mid {led['q_mid']:.3f} - P_mid {led['p_mid']:.3f} = "
-                                                f"{led['gap']:+.3f} < margin {margin:.2f}: the market does not pay "
-                                                f"for this interval", round(led["gap"], 4), margin))
+                if led.get("rule") == "crc":
+                    text = (f"credit/wing {led['q_mid']:.3f} - certified payout beta* {led.get('beta_certified')} = {led['gap']:+.3f} "
+                            f"(empirical payout at the strikes {led.get('beta_empirical', 0):.3f})")
+                else:
+                    text = f"Q_mid {led['q_mid']:.3f} - P_mid {led['p_mid']:.3f} = {led['gap']:+.3f}"
+                if led["gap"] >= margin - 1e-12:
+                    out.append(_ok("gate_coverage", f"{text} >= margin {margin:.2f}", round(led["gap"], 4), margin))
+                else:
+                    out.append(_no("gate_coverage", f"{text} < margin {margin:.2f}: the market does not pay for this interval",
+                                   round(led["gap"], 4), margin))
         else:
             out.append(_ok("gate_coverage", "coverage gate disabled (fixed strike rule)"))
         return out

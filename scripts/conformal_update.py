@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from agent.core import conformal as conf  # noqa: E402
 from agent.core.clock import now_et  # noqa: E402
 from agent.core.config import STATE_DIR, Settings  # noqa: E402
+from agent.core.strategy import wing_width_for  # noqa: E402
 from agent.data import cboe  # noqa: E402
 from agent.data.alpaca_data import AlpacaData  # noqa: E402
 
@@ -48,7 +49,9 @@ def main() -> None:
     else:
         p_entry = next(b["close"] for b in bars if b["et"] == "10:00")
         vix_prev = cboe.closes_before("VIX", day, 1)[-1]
-        sess = conf.open_session(st, p, day, datetime.now(tz=timezone.utc), p_entry, vix_prev, reconstructed=True)
+        und = s.enabled_underlyings()[0]
+        wing = wing_width_for(p_entry, s.strategy["structure"], float(s.underlying_cfg(und)["strike_increment"]))
+        sess = conf.open_session(st, p, day, datetime.now(tz=timezone.utc), p_entry, vix_prev, wing_usd=wing, reconstructed=True)
         print("reconstructed the interval at the 10:30 bar:", json.dumps(sess))
     rec = conf.eod_update(st, p, close, day)
     print(json.dumps(rec, indent=1))

@@ -42,14 +42,17 @@ def fmt(r: dict) -> str | None:
         return f"{t} llm_critic {d.get('verdict')}: {str(d.get('reason'))[:100]}"
     if k == "conformal_interval":
         s = r.get("session", {})
-        return f"{t} conformal_interval k={s.get('k')} alpha_t={round(s.get('alpha_t', 0), 4)} n={s.get('n')} impl_ref_usd={round(s.get('impl_ref_usd', 0), 2)} spot={s.get('spot_entry')}"
+        return (f"{t} conformal_interval rule={s.get('rule')} k={round(s.get('k', 0), 3)} beta_t={round(s.get('beta_t', 0), 4)} "
+                f"k_crc={round(s.get('k_crc', 0), 3)} alpha_t={round(s.get('alpha_t', 0), 4)} k_cov={round(s.get('k_cov', 0), 3)} n={s.get('n')} "
+                f"impl_ref_usd={round(s.get('impl_ref_usd', 0), 2)} spot={s.get('spot_entry')}")
     if k == "conformal":
         l, cf = r.get("ledger", {}), r.get("counterfactual_fixed", {})
-        return (f"{t} conformal Q_mid={l.get('q_mid', 0):.3f} P_mid={l.get('p_mid', 0):.3f} gap={l.get('gap', 0):+.3f} "
+        return (f"{t} conformal credit/wing={l.get('q_mid', 0):.3f} beta*={l.get('beta_certified')} empirical_payout={l.get('beta_empirical', 0):.3f} P_mid={l.get('p_mid', 0):.3f} gap={l.get('gap', 0):+.3f} "
                 f"margin={l.get('margin')} -> {'PASS' if l.get('passes') else 'REJECT'} | fixed rule gap={cf.get('gap')}")
     if k == "conformal_eod":
         c = r.get("record", {})
-        return f"{t} conformal_eod ratio={c.get('ratio', 0):.3f} k={c.get('k')} err={c.get('err')} alpha {c.get('alpha_before', 0):.4f} -> {c.get('alpha_after', 0):.4f}"
+        return (f"{t} conformal_eod ratio={c.get('ratio', 0):.3f} k={c.get('k')} payout_ratio={c.get('loss', 0):.3f} "
+                f"beta {c.get('beta_before', 0):.4f} -> {c.get('beta_after', 0):.4f} | err={c.get('err')} alpha {c.get('alpha_before', 0):.4f} -> {c.get('alpha_after', 0):.4f}")
     if k == "regime_model":
         return f"{t} regime_model p_inside={r.get('p_inside')} multiplier={r.get('multiplier')}"
     if k in ("order_submitted", "order_filled", "order_partial", "order_terminal", "order_walk_timeout",

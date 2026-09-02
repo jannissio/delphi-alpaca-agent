@@ -98,8 +98,9 @@ def build(recs: list[dict], session: str | None) -> tuple[str, dict]:
                   "P_mid = conformal p-value of the same distance in the trailing calibration scores. Trade iff Q_mid - P_mid >= margin."]
         for r in conf_iv:
             s = r["session"]
-            lines.append(f"- interval committed {r['ts'][:19]}: alpha_t {s['alpha_t']:.4f}, n {s['n']}, k {s['k']:.3f} "
-                         f"(clipped {s['clipped']}), VIX prev {s['vix_prev']}, implied ref move {s['impl_ref_usd']:.2f} $, anchor spot {s['spot_entry']}")
+            lines.append(f"- interval committed {r['ts'][:19]} ({s.get('rule')}): beta_t {s.get('beta_t', 0):.4f} -> k_crc {s.get('k_crc', 0):.3f}, "
+                         f"alpha_t {s['alpha_t']:.4f} -> k_cov {s.get('k_cov', 0):.3f}, n {s['n']}, chosen k {s['k']:.3f} (clipped {s['clipped']}), "
+                         f"VIX prev {s['vix_prev']}, implied ref move {s['impl_ref_usd']:.2f} $, wing {s.get('wing_usd')}, anchor spot {s['spot_entry']}")
         # one row per distinct (strikes, decision), with the evaluation count and the gap range
         agg: dict = {}
         for r in conf_led:
@@ -107,10 +108,11 @@ def build(recs: list[dict], session: str | None) -> tuple[str, dict]:
             key = (c["short_put"], c["short_call"], bool(l["passes"]))
             a = agg.setdefault(key, {"first": r["ts"][11:19], "last": r["ts"][11:19], "n": 0, "gaps": [], "q": [], "p": [],
                                      "credit": [], "cf_gap": cf.get("gap"), "cf_strikes": (cf.get("candidate") or {}).get("short_put")})
-            a["last"] = r["ts"][11:19]; a["n"] += 1; a["gaps"].append(l["gap"]); a["q"].append(l["q_mid"]); a["p"].append(l["p_mid"])
+            a["last"] = r["ts"][11:19]; a["n"] += 1; a["gaps"].append(l["gap"]); a["q"].append(l["q_mid"])
+            a["p"].append(l.get("beta_empirical", l["p_mid"]))
             a["credit"].append(c["credit_mid"])
         if agg:
-            lines += ["", "| UTC first-last | n | shorts | credit mid | Q_mid | P_mid | gap (min..max) | decision | fixed-rule gap |",
+            lines += ["", "| UTC first-last | n | shorts | credit mid | credit/wing (Q) | empirical payout at strikes (P) | gate gap vs beta* (min..max) | decision | fixed-rule gap |",
                       "|---|---|---|---|---|---|---|---|---|"]
             for (sp, sc, ok), a in agg.items():
                 lines.append(f"| {a['first']}-{a['last']} | {a['n']} | {sp:.0f}/{sc:.0f} | {sum(a['credit']) / a['n']:.3f} | "
@@ -118,8 +120,9 @@ def build(recs: list[dict], session: str | None) -> tuple[str, dict]:
                              f"{'TRADE' if ok else 'NO_TRADE'} | {a['cf_gap'] if a['cf_gap'] is None else format(a['cf_gap'], '+.3f')} |")
         for r in conf_eod:
             c = r["record"]
-            lines.append(f"- after the close: realised ratio {c['ratio']:.3f} vs k {c['k']:.3f} -> "
-                         f"{'OUTSIDE' if c['err'] else 'inside'}; alpha {c['alpha_before']:.4f} -> {c['alpha_after']:.4f}"
+            lines.append(f"- after the close: realised ratio {c['ratio']:.3f} vs k {c['k']:.3f} -> payout ratio {c.get('loss', 0):.3f}, "
+                         f"beta {c.get('beta_before', 0):.4f} -> {c.get('beta_after', 0):.4f}; coverage track "
+                         f"{'OUTSIDE' if c['err'] else 'inside'}, alpha {c['alpha_before']:.4f} -> {c['alpha_after']:.4f}"
                          f"{' (interval reconstructed at the 10:30 bar)' if c.get('reconstructed') else ''}")
         for r in conf_err[-5:]:
             lines.append(f"- error {r['ts'][:19]}: {r.get('error')}")
