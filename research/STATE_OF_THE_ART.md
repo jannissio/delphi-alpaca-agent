@@ -322,7 +322,7 @@ Was Retail nachweislich falsch macht und der Agent deshalb nie tut: kurzlaufende
 
 Kurzer eigener Prüfgang, keine Vollrecherche. Reinforcement Learning für Trading ist als Open-Source-Landschaft präsent, vor allem FinRL der AI4Finance Foundation: Liu et al., "FinRL: A Deep Reinforcement Learning Library for Automated Stock Trading in Quantitative Finance", NeurIPS 2020 Deep RL Workshop; Liu et al., "FinRL: Deep Reinforcement Learning Framework to Automate Trading in Quantitative Finance", ACM ICAIF 2021, DOI 10.1145/3490354.3494366; FinRL-Meta, NeurIPS 2021 Data-Centric AI Workshop. Qualitätsurteil: zitierfähig als Existenznachweis des Frameworks, Workshop- und Konferenzniveau, keine Performance-Evidenz. Dieselbe Gruppe räumt in Liu et al., "Deep Reinforcement Learning for Cryptocurrency Trading: Practical Approach to Address Backtest Overfitting", arXiv 2209.05559, 2022, das Backtest-Overfitting-Problem für DRL-Agenten explizit ein. Die 2024 bis 2026 erschienenen Arbeiten benennen übereinstimmend Nichtstationarität, niedriges Signal-Rausch-Verhältnis und Marktfriktionen als ungelöste Kernprobleme.
 
-Konsequenz für uns, im Write-up in einem Satz: Ein RL-Agent braucht Trainingsdaten, Validierung gegen Overfitting nach Bailey et al. und eine stationäre Umgebung; wir haben 2,5 Handelstage, eine explizit nichtstationäre 0DTE-Mikrostruktur seit 2022 und einen Erwartungswert nahe null. Ein in zwei Tagen trainierter RL-Agent wäre per Konstruktion overfit. Wir setzen stattdessen auf eine aus der Literatur abgeleitete, deterministische Regelstrategie plus LLM für unstrukturierte Information. Vertrauen: hoch, dass das die richtige Entscheidung ist; mittel für die Zitierqualität der RL-Quellen.
+Konsequenz für uns, im Write-up in zwei Sätzen, mit Evidenz statt Kalenderargument (Fassung vom Abend des 2. September nach dem Audit und den nachgelesenen Quellen): Auf echten Optionsdaten mit identischen Kosten schlägt keiner von drei Deep-Hedging-Agenten eine klassische Regel (Kumar 2026, arXiv:2608.29025, fünf Jahre Bitcoin-Optionen auf Deribit, 11.546 Testepisoden; das regelbasierte Whalley-Wilmott-Band sparte 1,79 $ je Episode, 95-%-KI [-2,21, -1,39]); berichtete DRL-Trading-Gewinne überleben keine seed- und multiplizitätsbewusste Auswertung (Grądzki 2026, J. Finance and Data Science, DOI 10.1016/j.jfds.2026.100205, gelesen: 20 Seeds, Sharpe im Mittel 0,604 bei Standardabweichung 0,193 und Spanne 0,233 bis 0,855; "selecting the best-performing seed instead of reporting the mean inflates the reported Sharpe by 44%"; keine paarweise Algorithmus-Differenz überlebt die Holm-Korrektur, kleinstes adjustiertes p 0,085). Die Gegenzitation, Egebjerg 2026 (J. Financial Stability 84, 101535, gelesen), hedgt eine long Call-Position mit E-mini-Futures (Kosten etwa 1,06 bp im Future) und schlägt das Black-Scholes-Delta moderat (15-Minuten-Rebalancing: Standardabweichung 0,0278 % gegen 0,0410 % des Basiswerts); sie testet kein ungehedgtes Verkaufen, und ihre Beobachtung, dass 0DTE-Optionen "more fragile, with limited scope for recovery" bleiben, spricht für Flügel und Credit-Gate als einzige Kontrolle einer ungehedgten Struktur. Ein veröffentlichter RL-Iron-Condor-Agent existiert nicht (Volltextsuche arXiv, 0 Treffer; der einzige Condor-Treffer, Huang, Sun & Yang 2025, arXiv:2501.12397, ist stochastische Kontrolle unter einer beschränkten Martingal-Annahme). Das eine RL-förmige Teilproblem, das wir gern hätten, ist die Ausführungsleiter; sie braucht Millisekunden-Orderbuchdaten, die es im Basisplan nicht gibt. Wir liefern die harte Regelschicht, die Safe-RL-Systeme des Standes der Technik (Zhang, "Tail-Safe", arXiv:2510.04555) an ihre Lerner anbauen, und verzichten auf den Lerner. Hinzu kommt das Kalenderargument als zweiter Satz: 2,5 Handelstage, nichtstationäre 0DTE-Mikrostruktur seit 2022, Erwartungswert nahe null.
 
 ---
 
@@ -522,3 +522,54 @@ Zwei weitere Rechercheagenten haben am Nachmittag die Kernidee und die Modellfra
 Originalitaet, geprueft in G 2 (RQ5): keine Arbeit setzt Options-Strikes als konformes Vorhersageintervall oder handelt das kalibrierte Intervall gegen seinen Marktpreis; naechster Nachbar ist Bastos (2024, Expert Systems with Applications), der konforme Intervalle um Optionspreise legt, ohne Handelsregel. Historischer Backfill (`docs/conformal_backfill.md`): Abdeckung 0,806 ueber 618 kalibrierte Sitzungen, alpha_t am 1. September 0,218, mittlerer Radius 0,73 implizierte Moves. Was die Historie nicht zeigen kann: ob das Gate Geld verdient, weil keine Optionspreise vorliegen; das wird live je Sitzung aus dem Audit-Log berichtet.
 
 **Nachtrag vom Nachmittag des 2. September (Conformal Risk Control).** Die Abdeckungsvariante kontrolliert, wie oft der Kurs das Intervall verlaesst; die richtige Groesse ist, wie viel wir im Erwartungswert auszahlen, weil die meisten Ausbrueche Teilverluste sind (G 4.3: Gewinnschwelle 75,7 statt 83 Prozent). Conformal Risk Control (Angelopoulos, Bates, Fisch, Lei, Schuster, ICLR 2024) verallgemeinert die Abdeckungsgarantie auf jede monotone, beschraenkte Verlustfunktion; die Auszahlung des Condors ist genau eine solche. Die Strikes werden deshalb ab Donnerstag auf den kleinsten Radius gesetzt, fuer den die erwartete Auszahlung mit endlicher Stichprobe auf hoechstens beta = 10 Prozent der Fluegelbreite zertifiziert ist; die Online-Anpassung (Rolling Risk Control, Feldman, Ringel, Bates, Romano, TMLR 2023) darf den Radius nur enger machen. Gate 31 lautet damit: Credit/Fluegel mindestens 0,10 plus 0,05 Marge, woraus ein erwarteter Gewinn von mindestens 5 Prozent der Fluegelbreite je Paket folgt (Saetze und Beweise in `docs/THEORY.md`). Historisch (618 Sitzungen): realisierte Auszahlungsquote 0,079 gegen die Schranke 0,10, in jedem Jahr darunter (0,070 / 0,079 / 0,090); feste Regel 0,119 / 0,113 / 0,073. Die Abdeckungsvariante bleibt als Gegenfaktum im Protokoll.
+
+---
+
+## 14. Dritte Revision, Abend des 2. September: unabhängiger Literatur-Audit
+
+Ein zweiter Agent hat am 2. September (15:43 bis 18:20 CEST) zwölf Themenberichte, rund 900 Quellenkarten und eine
+Zitatprüfung von 35 tragenden Quellen gegen Primärquellen erstellt (Ordner außerhalb des Repos; Urteil in
+`VERDICT.md`, Synthese in `STATE_OF_SCIENCE_2026.md`). Was daraus in dieses Repository übernommen wurde:
+
+1. **Vilkov 2026 ist überholt.** Der Autor hat im August 2026 einen Kostenfehler um den Faktor 100 korrigiert; danach
+   bleibt keine 0DTE-Struktur netto positiv (Condor-Bucket -0,96 -> -2,67). Alle Vilkov-Sharpe-Zahlen in F1 und in
+   Abschnitt 12 sind damit historisch; README, Write-up und Folien zitieren die korrigierte Fassung. Überlebt: der
+   Median-VRP von etwa 0,0011 % des Basiswerts ab 10:00 ET. Dew-Becker & Giglio (Chicago Fed WP 2025-17) kommen zum
+   selben Schluss für gehandelte Indexoptionen der letzten 15 Jahre.
+2. **Die Prämie ist über Nacht.** Muravyev & Ni (JFE 2020): delta-gehedgte S&P-500-Optionsrenditen im Mittel etwa
+   -0,7 %/Tag, davon etwa -1 %/Tag von Schluss bis Eröffnung und etwa +0,3 %/Tag intraday, über alle Laufzeiten und
+   Moneyness; Papagelis & Dotsis (JFM 2025) und Jones & Shemesh (JF 2018) bestätigen die Richtung. Delphi hält nie über
+   Nacht und verzichtet damit per Konstruktion auf den messbaren Teil; das ist jetzt in `docs/THEORY.md` Abschnitt 8
+   vorregistriert, mit der Roadmap "1DTE-Übernacht-Condor ab etwa 15:00 ET, kalibriert auf dem
+   Schluss-zu-Schluss-Horizont".
+3. **Neuheit enger gefasst.** Conformal Decision Theory (Lekeufack et al., ICRA 2024, nicht ICML), Conformal Kelly
+   (Ryan 2026), Selective CRC (Xu, Guo & Wei 2025), Cañete (COPA 2023), Wisniewski/Lindsay/Lindsay (COPA 2020) und die
+   P-gegen-Q-Ahnen Aït-Sahalia/Wang/Yared 2001, Constantinides/Jackwerth/Perrakis 2009, Faias/Santa-Clara 2017 werden
+   als Vorläufer genannt. Was bleibt: niemand setzt Strikes per Conformal Risk Control, fasst die Struktur als verkauftes
+   Prognoseintervall auf oder stellt das Zertifikat gegen den Breeden-Litzenberger-Preis desselben Intervalls.
+4. **Schärfster Einwand, offen benannt:** Das Zertifikat gilt marginal, das Gate wählt Tage aus (Jin & Ren 2025;
+   Gibbs, Cherian & Candès 2025; Xu/Guo/Wei 2025; Zhu et al. 2026). Der exakte Fix (Mondrian auf dem Gate-Ereignis)
+   braucht eine historische Credit/Flügel-Reihe, die im Basisplan nicht existiert; Bemerkung (v) zu Satz 3.
+5. **Gate 31 zertifiziert Kostendeckung, nicht Gewinn:** mu = 0,05 ist die modellierte Round-trip-Kostenmarge; die
+   Formulierung "E[Payoff] >= 5 % der Flügelbreite" wurde überall ersetzt. Credit wird am erwarteten Fill gelesen.
+6. **Lean-Vorarbeit existiert** (Ushakov & Berdinsky 2026 in Lean 4; Coelho 2026; Echenim/Guiol/Peltier 2018;
+   Coq-Matching; Imandra). Enge Fassung in `lean/README.md`.
+7. **Weitere Umformulierungen:** drei Stimmen = Enthaltungsfilter, kein Ensemble (Kim 2026; Bahuguna 2026);
+   Determinismus ist eine Assurance-, keine Korrektheitseigenschaft (Thinking Machines 2025: 80 von 1.000
+   Temperatur-0-Antworten verschieden); "Level passt online an" ist derzeit ein wirkungsloses Sicherheitsventil;
+   Satz-4-Slack 0,224 ist auf Jahresfrist vakuos; Koviazin et al. = IC-AIF 2026, DOI 10.1145/3800973.3801029;
+   15:15-Flatten als Liquiditätsregel (Todorov & Zhang; Cboe-VIX1D-Freeze), nicht über Late-Day-Momentum;
+   Credit-Floor als Reibungsbudget, kein akademischer Beleg; "66 Einreichungen" -> "50 lesbare am 2. September".
+8. **Ausführung:** Alpaca Paper füllt nur marktfähige Limits, keine Warteschlange, keine Preisverbesserung
+   (Dokumentation wörtlich geprüft). Folgen und Änderungen datiert in `docs/CONFIG_CHANGES.md`.
+9. **Nicht übernommen, mit Grund:** Wechsel des Normalisierers auf Geschäftszeit (bricht die Austauschbarkeit des
+   Kalibrierfensters zwei Tage vor Abgabe; als Roadmap notiert); Gate 31 pro Seite (die zweiseitige Verlustfunktion
+   ist das, was Satz 3 zertifiziert; die Seitenaufteilung wird protokolliert, nicht erzwungen); Conformal-Mengen
+   über das LLM-Regime-Label (Kotte 2026: Unmöglichkeitsresultat für strukturierte LLM-Ausgaben);
+   RL-Ausführungsagent (braucht Millisekunden-Orderbuchdaten, die es im Basisplan nicht gibt).
+10. **Vom Audit selbst überzogen und deshalb nicht übernommen:** Goetzmann et al. 2007 enthält beides, unendlicher
+    Erwartungswert der Stichproben-Sharpe (S. 1505) und endliches Populationsmaximum 1,31; die Koviazin-Zahlen sind aus
+    dem PDF bestätigt, nur das Zitierformat war zu ändern; das Vilkov-Paar "0,77 -> -0,20" stand nicht in unserem README
+    (dort standen die Tabelle-3-Werte -0,24 -> -0,65 aus F1); die Füllwahrscheinlichkeit je Tick im Audit ist ein Modell,
+    kein Messwert; die CNDR/BFLY/WPUT-Zahlen sind Rechnungen des Auditors aus Cboe-Daten und noch nicht unabhängig
+    repliziert, wir zitieren sie mit dieser Kennzeichnung.

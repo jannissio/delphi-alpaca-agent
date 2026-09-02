@@ -47,7 +47,16 @@ def main() -> None:
         run([py, "-X", "utf8", str(ROOT / "scripts" / "conformal_backfill.py"), "--force",
              "--out", str(Path(td) / "conformal.json"), "--json", str(summary_path)])
         backfill = json.loads(summary_path.read_text(encoding="utf-8"))
+        ev_path = Path(td) / "evidence.json"
+        run([py, "-X", "utf8", str(ROOT / "scripts" / "evidence.py"), "--state", str(Path(td) / "conformal.json"),
+             "--audit", str(Path(td) / "no_audit.jsonl"), "--out", str(Path(td) / "evidence.md"), "--json", str(ev_path)])
+        evidence = json.loads(ev_path.read_text(encoding="utf-8"))
     values = {
+        "evidence.risk_W_T": evidence["risk_W_T"],
+        "evidence.risk_W_max": evidence["risk_W_max"],
+        "evidence.risk_p_anytime": evidence["risk_p_anytime"],
+        "evidence.ceiling_g020_T3": evidence["ceiling_g020_T3"],
+        "evidence.sessions_for_p005_g020": evidence["sessions_for_p005_g020"],
         "backfill.sessions_in_history": backfill["n_rows"],
         "backfill.first_session": backfill["first"],
         "backfill.last_session": backfill["last"],

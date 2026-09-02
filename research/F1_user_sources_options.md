@@ -1,5 +1,15 @@
 # F1 — Four Paywalled Sources, Read in Full, Checked Against the Design
 
+> **Superseded in part (added 2026-09-02, evening).** Every Sharpe ratio, net-of-cost mean and conditional
+> out-of-sample figure quoted from Vilkov (V) below predates the author's own correction of August 2026
+> (`KNOWN-ISSUES.md` in github.com/vilkovgr/0dte-strategies, "Transaction-cost unit-scale error"): half-spreads
+> had been charged at 1/100 of their true size. After the fix "no structure retains a materially positive net
+> Sharpe ratio" and the iron butterfly/condor bucket moves from -0.96 to -2.67. What survives is the median realised
+> 0DTE variance risk premium of about 0.0011 % of the underlying from 10:00 ET to expiration and the qualitative
+> conclusion that 0DTE multi-leg structures do not survive realistic frictions, which the correction strengthens.
+> The E-V rows are kept for the record and must not be quoted without this note. README, WRITEUP and SLIDES cite the
+> corrected result.
+
 Report F1. Author: Claude (Opus 5) research agent. Date: 2026-09-02.
 Scope: the four papers the user obtained via university access, read completely, extracted, and checked
 against the decisions recorded in `research/STATE_OF_THE_ART.md` sections 1, 3, 6 and 8.

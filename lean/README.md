@@ -39,6 +39,26 @@ credit `c ≥ (β + μ)·w`, the average payoff satisfies `(1/n) Σ (c - w·ℓ 
 **(d) Discrete layer-cake identity** (`sum_eq_sum_card_filter`): for
 integer-valued `f i ≤ N`, `Σ_{i∈s} f i = Σ_{j<N} #{i ∈ s | j < f i}`.
 
+## Prior art, stated narrowly
+
+Option pricing and market mechanisms have been machine-checked before, and we cite them rather than claim
+otherwise: Ushakov & Berdinsky (2026, arXiv:2608.19223) verify the Black–Scholes closed form with digital and
+barrier options in Lean 4/Mathlib, sorry-free and on the same three axioms as this file; Coelho (2026,
+arXiv:2606.01356) maintains a Lean 4 mathematical-finance library with several hundred sorry-free theorems;
+Echenim, Guiol & Peltier (2018, arXiv:1807.09873) formalise markets, portfolios, arbitrage and the
+Cox–Ross–Rubinstein model in Isabelle/HOL; Sarswat & Singh and successors (2019–2024) verify exchange
+matching in Coq with checkers run against real exchange logs; and Imandra (Passmore & Ignatovich, FMCAD 2018)
+is a commercial prover built for financial algorithms. What we did not find, in roughly ten targeted searches,
+is a machine-checked risk-control lemma for a trading *decision rule* — the deterministic scaffolding by which a
+rule bounds its own loss — or any formalisation of conformal prediction or exchangeability in Lean, Isabelle,
+Coq, HOL, Imandra or Dafny. The surviving claim is that narrow one; "no prior formal verification of a trading
+system" would be false and we do not make it. The nearest architectural peers are Koomullil's proof-carrying
+certificates for LLM pipelines (2026, arXiv:2605.16407), which verify the deterministic computations around a
+model rather than the model, with the same {propext, Classical.choice, Quot.sound} trust boundary, and the
+"Type-Checked Compliance" line (arXiv:2604.01483). Three replies to "the theorems are elementary": the Lean file
+is the specification, the artefact is the audited trust boundary, and formalising forced every hypothesis
+(`ω > 0`, `m ≥ 0`, `w > 0`, nonempty calibration set) to become explicit.
+
 ## What is NOT proved (cited only)
 
 The probabilistic step of Conformal Risk Control — for exchangeable

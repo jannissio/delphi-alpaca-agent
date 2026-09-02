@@ -64,3 +64,9 @@ goes live with a restart. Do it while the book is flat, in this order:
 6. Start: `powershell -ExecutionPolicy Bypass -File scripts/run_agent_detached.ps1`; note the pid.
 7. Verify within a minute: the audit log has a new `startup` record whose `git` hash is the new commit,
    then `heartbeat` lines; `python scripts/watch_audit.py` for the session.
+8. Known broker limit: Alpaca caps the number of same-day-expiry contracts per account (HTTP 422, "exceeded
+   account limit for contracts expiring today", limit unpublished). The agent logs `opens_blocked` and sends no
+   further opening orders that session; existing positions are still managed. Nothing to do.
+9. After the close (16:12 ET or later): `python scripts/conformal_update.py --date <session>` only if the agent was
+   not running at 16:10 ET; then `python scripts/report.py --session <session>`, `python scripts/evidence.py`,
+   `python scripts/dashboard.py`, `python scripts/publish_dashboard.py --push`.

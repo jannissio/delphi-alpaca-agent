@@ -1,4 +1,24 @@
 {
+ "evidence.risk_W_T": {
+  "expected": 9.18941994106373e-12,
+  "tol": 1e-06
+ },
+ "evidence.risk_W_max": {
+  "expected": 2.6592471318041104,
+  "tol": 1e-06
+ },
+ "evidence.risk_p_anytime": {
+  "expected": 0.376046283190525,
+  "tol": 1e-06
+ },
+ "evidence.ceiling_g020_T3": {
+  "expected": 1.953125,
+  "tol": 1e-06
+ },
+ "evidence.sessions_for_p005_g020": {
+  "expected": 14,
+  "tol": 0.0
+ },
  "backfill.sessions_in_history": {
   "expected": 668,
   "tol": 0.0
@@ -88,7 +108,7 @@
   "tol": 1e-06
  },
  "tests.count": {
-  "expected": 37,
+  "expected": 40,
   "tol": 0.0
  }
 }
