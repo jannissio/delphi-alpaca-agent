@@ -452,7 +452,7 @@ class Agent:
         self.audit.write("execute_start", candidate=cand.summary(), prices=prices, tick=tick,
                          collar=[round(lo, 3), round(hi, 3)], rationale=cand.rationale)
         res = self.walker.run(legs, cand.contracts, prices, tag=f"open-{cand.underlying}", collar_ok=collar_ok,
-                              on_order_sent=self._on_order_sent)
+                              on_order_sent=self._on_order_sent, net_credit=True)
         if res["status"] in {"filled", "partial"} and res["filled_qty"] > 0:
             filled_qty = int(res["filled_qty"])
             credit = float(res["avg_price"] or res["last_price"])

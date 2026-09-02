@@ -50,7 +50,8 @@ class FakeTrading:
     def submit_order(self, req):
         self.n += 1
         oid = f"ord{self.n}"
-        px = float(req.limit_price)
+        px = abs(float(req.limit_price))
+        self.last_signed_limit = float(req.limit_price)
         fill = self.fill_at_rung is not None and abs(px - self.fill_at_rung) < 1e-9
         o = SimpleNamespace(id=oid, status="filled" if fill else "new", filled_qty=str(req.qty) if fill else "0",
                             filled_avg_price=str(px) if fill else None, client_order_id=req.client_order_id,
@@ -189,6 +190,7 @@ def test_full_cycle_opens_then_take_profit_closes(agent):
     assert gates["passed"], [g for g in gates["results"] if not g["passed"]]
     assert ag.state.orders_sent == len([k for k in kinds if k == "order_submitted"]) >= 3
     assert gates["candidate"]["contracts"] == 1     # pilot lot on the first order of the campaign
+    assert ag.walker.trading.last_signed_limit < 0  # Alpaca mleg: credit packages carry a NEGATIVE limit price
 
     # second cycle: duplicate-order gate must block the identical package inside 60 s
     ag.cycle()

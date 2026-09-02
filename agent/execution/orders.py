@@ -58,9 +58,17 @@ def build_close_legs(position_legs: list[dict]) -> list[OptionLegRequest]:
     return legs
 
 
-def mleg_limit_request(legs: list[OptionLegRequest], qty: int, limit_price: float, tag: str) -> LimitOrderRequest:
+def signed_limit(price_magnitude: float, net_credit: bool) -> float:
+    """Alpaca mleg convention (API reference, verified 2026-09-02): a NEGATIVE limit_price is a
+    credit to be received, a POSITIVE one a debit to be paid. Our ladders are magnitudes."""
+    px = _round_price(abs(price_magnitude))
+    return -px if net_credit else px
+
+
+def mleg_limit_request(legs: list[OptionLegRequest], qty: int, limit_price: float, tag: str,
+                       net_credit: bool) -> LimitOrderRequest:
     return LimitOrderRequest(
-        qty=qty, limit_price=_round_price(limit_price), order_class=OrderClass.MLEG,
+        qty=qty, limit_price=signed_limit(limit_price, net_credit), order_class=OrderClass.MLEG,
         type=OrderType.LIMIT, time_in_force=TimeInForce.DAY, legs=legs,
         client_order_id=f"{tag}-{uuid.uuid4().hex[:10]}",
     )
@@ -107,7 +115,8 @@ class OrderWalker:
 
     def _status(self, order_id: str):
         o = self.trading.get_order_by_id(order_id)
-        return o, str(o.status).split(".")[-1].lower(), float(o.filled_qty or 0), (float(o.filled_avg_price) if o.filled_avg_price else None)
+        avg = abs(float(o.filled_avg_price)) if o.filled_avg_price else None
+        return o, str(o.status).split(".")[-1].lower(), float(o.filled_qty or 0), avg
 
     def _cancel(self, order_id: str) -> None:
         try:
@@ -116,14 +125,17 @@ class OrderWalker:
             log.warning("cancel %s failed: %s", order_id, exc)
 
     def run(self, legs: list[OptionLegRequest], qty: int, prices: list[float], tag: str,
-            collar_ok: Callable[[float], bool], on_order_sent: Callable[[str, float], None]) -> dict:
+            collar_ok: Callable[[float], bool], on_order_sent: Callable[[str, float], None],
+            net_credit: bool = True) -> dict:
         """Submit at prices[0], then cancel/replace down the ladder until filled or exhausted.
 
-        Returns {status, filled_qty, avg_price, order_ids, last_price}.
+        prices are magnitudes; net_credit selects the Alpaca sign (negative = credit received).
+        Returns {status, filled_qty, avg_price, order_ids, last_price}; avg_price is a magnitude.
         """
         result = {"status": "unfilled", "filled_qty": 0.0, "avg_price": None, "order_ids": [], "last_price": None}
         if self.dry_run:
-            self.audit.write("order_dry_run", tag=tag, qty=qty, prices=prices, legs=[l.model_dump() for l in legs])
+            self.audit.write("order_dry_run", tag=tag, qty=qty, prices=prices, net_credit=net_credit,
+                             legs=[l.model_dump() for l in legs])
             return {**result, "status": "dry_run"}
 
         t_start = self.now()
@@ -131,7 +143,7 @@ class OrderWalker:
             if not collar_ok(px):
                 self.audit.write("order_price_rejected_by_collar", tag=tag, price=px)
                 break
-            req = mleg_limit_request(legs, qty, px, tag)
+            req = mleg_limit_request(legs, qty, px, tag, net_credit)
             try:
                 o = self.trading.submit_order(req)
             except Exception as exc:
@@ -144,7 +156,8 @@ class OrderWalker:
             result["last_price"] = px
             on_order_sent(oid, px)
             self.audit.write("order_submitted", tag=tag, order_id=oid, client_order_id=req.client_order_id,
-                             price=px, qty=qty, step=i, legs=[l.model_dump() for l in legs])
+                             price=px, signed_limit=req.limit_price, qty=qty, step=i,
+                             legs=[l.model_dump() for l in legs])
 
             # poll until filled, step interval elapsed, or overall timeout
             deadline = self.now() + self.step_interval

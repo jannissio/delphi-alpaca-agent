@@ -1,0 +1,28 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Delphi dashboard</title>
+<style>
+:root{--bg:#fbfaf7;--fg:#1c1b19;--muted:#6b6862;--line:#e4e1da;--ok:#1f7a4d;--no:#a33a2a;--accent:#2c4c8c}
+@media (prefers-color-scheme:dark){:root{--bg:#14161a;--fg:#e8e6e1;--muted:#9a978f;--line:#2b2f36;--ok:#5ec48f;--no:#e0705c;--accent:#8fb0ff}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,Segoe UI,Roboto,sans-serif}
+main{max-width:1000px;margin:0 auto;padding:28px 20px 60px}
+h1{font-size:26px;margin:0 0 4px} h2{font-size:18px;margin:32px 0 8px;border-bottom:1px solid var(--line);padding-bottom:4px}
+.claim{font-weight:600;color:var(--accent);margin:6px 0 18px} .muted{color:var(--muted);font-size:13px}
+table{border-collapse:collapse;width:100%;font-size:14px;margin:8px 0} th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600} .ok{color:var(--ok)} .no{color:var(--no)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:12px 0}
+.tile{border:1px solid var(--line);border-radius:8px;padding:10px 12px} .tile b{display:block;font-size:22px}
+.wrap{overflow-x:auto} pre{white-space:pre-wrap;font-size:13px}
+</style></head><body><main>
+<h1>Delphi: 0DTE iron condor agent on Alpaca paper</h1>
+<div class="claim">We do not claim a statistically detectable edge. We claim a risk process that behaved exactly as specified.</div>
+<div class="muted">sessions: 2026-09-02 | audit records: 2 | generated from state/audit.jsonl</div>
+<div class="grid">
+<div class="tile"><span class="muted">positions opened / closed</span><b>0 / 0</b></div>
+<div class="tile"><span class="muted">realised P&amp;L (closed)</span><b>+0.00 USD</b></div>
+<div class="tile"><span class="muted">entry slippage vs mid</span><b>+0.00 USD</b></div>
+<div class="tile"><span class="muted">gate evaluations / rejections</span><b>0 / 0</b></div>
+<div class="tile"><span class="muted">halts / kill events</span><b>0 / 0</b></div>
+<div class="tile"><span class="muted">LLM decisions unanimous</span><b>0 / 0</b></div>
+</div>
+<h2>Equity</h2><div class="muted">no marks yet</div>
+<h2>Positions</h2><div class="muted">none</div><h2>Gate ledger</h2><div class='wrap'><div class="muted">no candidate evaluated yet</div></div><h2>NO_TRADE reasons</h2><div class="muted">none</div><h2>LLM</h2><div class='muted'>regime decisions 0 (families {}); critic verdicts {}; regime call latency ms min/median/max: - / - / -; fill rungs -</div><div class="muted">no LLM calls yet</div><h2>Journal (last entries)</h2><h2>Not reported, on purpose</h2><p class='muted'>Sharpe ratio, win rate, annualised return, profit factor. With a handful of observations these are noise: the minimum track record to certify an annualised Sharpe of 1.0 at 95 % with skew -1.5 and kurtosis 6 is 751 daily observations (Bailey &amp; Lopez de Prado 2014).</p></main></body></html>

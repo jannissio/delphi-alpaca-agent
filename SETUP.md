@@ -2,6 +2,8 @@
 
 Stand der Maschine (geprüft 2026-09-01): Python 3.12.10, Node 24, git 2.49, Claude Code 2.1.257 vorhanden. **Fehlt:** `uv`/`uvx` (für den MCP-Server), Alpaca CLI, `alpaca-py`.
 
+> **Stand 2. September, 09:15 MESZ:** Schritte 1 bis 4 erledigt (Paper-Konto PA314NYH4H7G aktiv, Keys in `.env`, venv unter `.venv`, MCP-Server ohne uv direkt aus der venv registriert und verbunden). Offen: Alpaca-CLI (Schritt 5).
+
 ## 1. Alpaca-Account und Paper-Konto (musst du selbst machen, ca. 15 min)
 
 1. Registrieren über den Hackathon-Link: https://alpaca.markets/?utm_source=website&utm_medium=event&utm_campaign=lablab_hackathon

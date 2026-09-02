@@ -50,8 +50,10 @@ def flatten_position(walker: OrderWalker, position: BookPosition, quotes: dict[s
     def collar_ok(px: float) -> bool:
         return abs(px) <= upper + 1e-9
 
-    res = walker.run(legs, position.contracts, ladder, tag=f"close-{position.position_id[:6]}",
-                     collar_ok=collar_ok, on_order_sent=on_order_sent)
+    # closing a credit package normally costs a debit (positive Alpaca limit); if the package
+    # has turned into a net credit to close (rare, deep ITM wings) the sign flips per rung
+    res = walker.run(legs, position.contracts, [abs(p) for p in ladder], tag=f"close-{position.position_id[:6]}",
+                     collar_ok=collar_ok, on_order_sent=on_order_sent, net_credit=(nat < 0))
     walker.audit.write("flatten_result", position_id=position.position_id, **{k: v for k, v in res.items() if k != "order_ids"},
                        order_ids=res.get("order_ids", []))
     return res
