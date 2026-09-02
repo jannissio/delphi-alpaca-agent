@@ -33,7 +33,7 @@ structure:
 sizing:
   positions_per_session_max: 3
   contracts_per_position_max: 6    # F1 E-V4/E-F12: cap 6, slice into orders of <= 5 (risk_limits caps orders at 5)
-  first_live_order_contracts: 1    # deploy_paper_first pilot: first order of the campaign is 1 lot
+  first_live_order_contracts: 0    # deploy_paper_first pilot: 1 = first order of the campaign is 1 lot; 0 = off. Pilot ran on 2026-09-02; full size from 2026-09-03
   half_size_if_vix1d_top_tercile: true   # F1 E-V12: condor mean by implied-variance tercile +0.0016/+0.0005/-0.0111 (t=-0.93)
   vix1d_tercile_lookback_sessions: 60
 

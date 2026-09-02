@@ -270,7 +270,8 @@ def build_condor(chain: list[OptionQuote], spot: float, underlying: str, expiry:
         credit_nat = package_credit(legs, "natural")
         min_credit = min_pct * w_eff * max(a, b)
         if credit_mid < min_credit:
-            errors.append(f"wing {w_eff:.0f}: credit {credit_mid:.2f} < {min_credit:.2f} ({min_pct:.0%} of wing)")
+            ratio_note = f" x ratio {max(a, b)}" if max(a, b) > 1 else ""
+            errors.append(f"wing {w_eff:.0f}: credit {credit_mid:.2f} < {min_credit:.2f} ({min_pct:.0%} of wing{ratio_note})")
             continue
         ml = max_loss_per_package(a, b, w_eff, credit_mid)
         if ml <= 0:

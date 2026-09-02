@@ -147,6 +147,14 @@ REGIME_OK = {"RegimeSchema": {"vol_regime": "low", "trend": "chop", "event_risk"
              "JournalSchema": {"entry": "fake entry", "lesson": ""}}
 
 
+def set_pilot(ag, first_live_order_contracts: int) -> None:
+    """Settings are frozen mappings (immutable config, gate 27); swap in a frozen copy with the pilot flag changed."""
+    from agent.core.config import _freeze
+    d = dict(ag.s.strategy)
+    d["sizing"] = {**ag.s.strategy["sizing"], "first_live_order_contracts": first_live_order_contracts}
+    ag.s.strategy = _freeze(d)
+
+
 def build_agent(state_dir, monkeypatch, payloads=None):
     """An agent wired to fakes, with its state in state_dir and an LLM that returns `payloads`."""
     payloads = payloads or REGIME_OK
@@ -165,6 +173,7 @@ def build_agent(state_dir, monkeypatch, payloads=None):
     monkeypatch.setattr(orders_mod.time, "sleep", lambda s: None)
     monkeypatch.setattr(main_mod.time, "sleep", lambda s: None)
     ag = main_mod.Agent()
+    set_pilot(ag, 1)   # the pilot rule is under test whatever the live config says
     chain = synthetic_chain(ts=FakeClock.now(timezone.utc))
     trading = FakeTrading()
     ag.data = FakeData(chain, trading)
@@ -327,3 +336,15 @@ def test_candidate_is_byte_identical_across_llm_outputs(tmp_path, monkeypatch):
     assert execs[0]["prices"] == execs[1]["prices"] and execs[0]["collar"] == execs[1]["collar"]
     assert json.dumps(gates[0]["candidate"], sort_keys=True) == json.dumps(gates[1]["candidate"], sort_keys=True)
     assert [g["passed"] for g in gates[0]["results"]] == [g["passed"] for g in gates[1]["results"]]
+
+
+def test_first_order_is_full_size_when_pilot_is_off(tmp_path, monkeypatch):
+    """first_live_order_contracts: 0 (the live config from 2026-09-03) sizes the first order from the budget."""
+    ag = build_agent(tmp_path / "full", monkeypatch, REGIME_OK)
+    set_pilot(ag, 0)
+    ag.walker.trading.fill_at_rung = None
+    ag.cycle()
+    gates = [r for r in ag.audit.read_all() if r["kind"] == "gates"][-1]
+    assert gates["passed"], [g for g in gates["results"] if not g["passed"]]
+    qty = gates["candidate"]["contracts"]
+    assert 2 <= qty <= 5, qty   # more than the pilot lot, never above the per-order cap

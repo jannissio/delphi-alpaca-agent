@@ -135,14 +135,15 @@ def main() -> None:
         print("   features", {k: round(v, 4) for k, v in out.features.items()})
         mult *= out.multiplier
     budget = Budget(s.capital, s.session_budget, s.campaign_budget, 0.0, 0.0, mult)
-    qty = contracts_for(budget, cand.max_loss_per_package, float(s.risk["max_order_max_loss_usd"]),
-                        min(int(s.risk["max_contracts_per_order"]), int(s.strategy["sizing"]["contracts_per_position_max"])),
+    pilot_cfg = int(s.strategy["sizing"]["first_live_order_contracts"]) == 1
+    max_qty = min(int(s.risk["max_contracts_per_order"]), int(s.strategy["sizing"]["contracts_per_position_max"]))
+    qty = contracts_for(budget, cand.max_loss_per_package, float(s.risk["max_order_max_loss_usd"]), max_qty,
                         pilot_first_order=True, positions_planned=3)
-    qty_full = contracts_for(budget, cand.max_loss_per_package, float(s.risk["max_order_max_loss_usd"]),
-                             min(int(s.risk["max_contracts_per_order"]), int(s.strategy["sizing"]["contracts_per_position_max"])),
+    qty_full = contracts_for(budget, cand.max_loss_per_package, float(s.risk["max_order_max_loss_usd"]), max_qty,
                              pilot_first_order=False, positions_planned=3)
-    cand.contracts = qty_full or 1
-    print(f"== sizing: pilot {qty}, full {qty_full} contracts; session budget {budget.session_budget:.0f}; max loss/package {cand.max_loss_per_package:.0f}")
+    cand.contracts = (qty if pilot_cfg else qty_full) or 1
+    print(f"== sizing: config pilot {'ON' if pilot_cfg else 'OFF'} -> first order {cand.contracts} contracts "
+          f"(pilot {qty}, full {qty_full}); session budget {budget.session_budget:.0f}; max loss/package {cand.max_loss_per_package:.0f}")
     tick = package_tick(cand.legs)
     print("== ladder", walk_prices_ticks(cand.credit_mid, cand.credit_natural, tick, [0, 1, 2], True), "tick", tick)
     flags = flags_for(s.calendar, now)

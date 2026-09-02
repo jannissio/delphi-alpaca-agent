@@ -45,3 +45,22 @@ position is open.
 
 * Paper account only (`ALPACA_PAPER_TRADE=true` is enforced at start-up).
 * Session max loss 2 % ($2,000), campaign 6 % ($6,000), per order $1,000 / 5 contracts.
+
+## 7. Planned restart with new code (Thursday 2026-09-03, before 09:30 ET / 15:30 CEST)
+
+The config is read once at start-up, so the new logic (conformal risk control, gate 31, full size) only
+goes live with a restart. Do it while the book is flat, in this order:
+
+1. Flat and idle: `bash scripts/status.sh` shows no positions and no open orders; the audit log tail shows
+   `heartbeat ... market closed`.
+2. Stop the old process: `python scripts/kill.py` (cancel-all + flag), then `Stop-Process -Id <pid>`
+   (pid from `Get-CimInstance Win32_Process -Filter "Name='python.exe'"`), then `python scripts/kill.py --clear`.
+3. Yesterday's close must be in the conformal state: `state/conformal.json` has `updated_through` = the
+   previous session. If not: `python scripts/conformal_update.py --date <previous session>`.
+4. `python -m pytest -q` and `python scripts/reproduce.py` both green on the commit that will run.
+5. `python scripts/preflight.py --at 10:20`: read the interval line (n >= 50 scores), the sizing line
+   (`config pilot OFF`), and the P-vs-Q decision. Stale pre-market quotes are expected; the live loop
+   re-reads the chain every cycle.
+6. Start: `powershell -ExecutionPolicy Bypass -File scripts/run_agent_detached.ps1`; note the pid.
+7. Verify within a minute: the audit log has a new `startup` record whose `git` hash is the new commit,
+   then `heartbeat` lines; `python scripts/watch_audit.py` for the session.
