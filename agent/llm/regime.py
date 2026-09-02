@@ -54,9 +54,16 @@ Answer with ONE JSON object and nothing else, with exactly these keys:
 Guidance grounded in the evidence base of this system:
 - Short-dated index premium selling has an expected value near zero after costs; the only
   reason to trade is a calm, contango regime inside a pre-approved time window.
-- "stressed" means the term structure is inverted or an unscheduled shock is in the news.
+- "stressed" means the term structure is inverted or an acute, developing shock is in the news.
 - Set "unscheduled" only for a shock that is NOT on the scheduled calendar you are given
   (geopolitical event, exchange outage, surprise central-bank action, systemic credit news).
+- Headlines carry their age. A veto for an unscheduled shock is justified only when the shock
+  is acute and developing (headlines younger than about six hours, escalating language) AND
+  the market data you are given do not yet reflect it (calm indices while the news says crisis).
+  Geopolitical or macro tension that is older than that and that the market has already traded
+  through (indices calm, term structure in contango, realised volatility ordinary) is
+  "event_risk": "unscheduled" with "veto": false and the normal strategy family. You are
+  the last line for what the numbers cannot see, not a second opinion on what they already show.
 - Prefer IRON_CONDOR_0DTE in normal or low regimes with trend "chop"; prefer NO_TRADE in
   "stressed", in "unscheduled" event risk, or when the headlines describe an ongoing crash.
 - PUT_CREDIT_SPREAD / CALL_CREDIT_SPREAD are only for a persistent one-directional drift
@@ -93,8 +100,9 @@ def build_user_prompt(now: datetime, snap: Optional[RegimeSnapshot], flags: Even
     }))
     lines.append("Scheduled events (anonymised, relative days):")
     lines += ["  - " + anonymize(_relative_day(u, et.date())) for u in upcoming] or ["  - none"]
-    lines.append("Recent headlines (anonymised, newest first):")
-    hl = anonymize_headlines(headlines)
+    lines.append("Recent headlines (anonymised, newest first, with age). Headlines older than 6 hours are "
+                 "context only: the market has traded through them and they cannot justify a veto on their own.")
+    hl = anonymize_headlines(headlines, now)
     lines += ["  - " + h for h in hl[:20]] or ["  - none available"]
     lines.append("Return the JSON object now.")
     return "\n".join(lines)
@@ -123,7 +131,8 @@ def entropy_bits(values: list[str]) -> float:
     if n == 0:
         return 0.0
     counts = Counter(values)
-    return -sum((c / n) * math.log2(c / n) for c in counts.values())
+    h = -sum((c / n) * math.log2(c / n) for c in counts.values())
+    return abs(h) if h != 0 else 0.0
 
 
 def classify_regime_votes(provider: FeatherlessProvider, user_prompt: str, k: int

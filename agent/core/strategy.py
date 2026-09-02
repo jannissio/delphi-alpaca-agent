@@ -6,7 +6,8 @@ Pure functions over OptionQuote snapshots. No I/O, no LLM. Evidence:
     0DTE sale and condor Sharpe rises with short distance (F1 E-V7, E-V8, E-V11);
   * wing width max($3, 0.5 % of spot): narrow wings are untested and four legs of
     half-spread eat the credit (F1 E-V8, E-F12);
-  * credit >= 25 % of wing width, |net delta| <= 0.05 per package after strike rounding;
+  * credit >= 15 % of wing width (else one strike narrower, down to the minimum wing),
+    |net delta| <= 0.05 per package after strike rounding;
   * wings always bought (A-K7, C gate 4); Black-Scholes deltas are a cross-check only (A-K10);
   * event variance from two expiries (Dubinsky et al. 2019 Eq. 4) is logged and stripped
     before the IV-vs-RV comparison (F2 5.1).
@@ -149,6 +150,24 @@ def _pick_leg(table: dict[float, OptionQuote], strike: float, side: Side, ratio:
     return Leg(quote=q, side=side, ratio=ratio)
 
 
+def _pick_wing(table: dict[float, OptionQuote], short_strike: float, wing: float, inc: float, right: Right,
+               max_ticks: float, min_wing: float) -> Leg:
+    """Bought wing at the configured width, else one or two strikes wider, else one narrower (>= min)."""
+    sign = 1.0 if right == Right.CALL else -1.0
+    candidates = [wing, wing + inc, wing + 2 * inc] + ([wing - inc] if wing - inc >= min_wing else [])
+    tried = []
+    for w in candidates:
+        k = short_strike + sign * w
+        q = table.get(k)
+        if q is None or not q.is_quotable:
+            tried.append(f"{k}:missing")
+            continue
+        if spread_in_ticks(q) <= max_ticks:
+            return Leg(quote=q, side=Side.BUY, ratio=1)
+        tried.append(f"{k}:{spread_in_ticks(q):.0f}t")
+    raise StrategyError(f"no {right.value} wing within {max_ticks:.0f} ticks: {tried}")
+
+
 def _shift_into_delta_band(table: dict[float, OptionQuote], strike: float, right: Right,
                            dmin: float, dmax: float, inc: float, spot: float) -> float:
     """Move a short strike outward until |delta| <= dmax, inward until >= dmin (cross-check)."""
@@ -210,29 +229,48 @@ def build_condor(chain: list[OptionQuote], spot: float, underlying: str, expiry:
     sp = _shift_into_delta_band(puts, sp, Right.PUT, s["short_delta_min"], s["short_delta_max"], inc, spot)
     if sc <= spot or sp >= spot:
         raise StrategyError(f"short strikes straddle spot incorrectly: sc={sc} sp={sp} spot={spot}")
-    lc, lp = sc + wing, sp - wing
-
-    call_legs = [_pick_leg(calls, sc, Side.SELL, 1), _pick_leg(calls, lc, Side.BUY, 1)]
-    put_legs = [_pick_leg(puts, sp, Side.SELL, 1), _pick_leg(puts, lp, Side.BUY, 1)]
     max_ticks = float(ex["max_leg_spread_ticks"])
-    wide = [l.quote.symbol for l in call_legs + put_legs if spread_in_ticks(l.quote) > max_ticks]
+    max_wing_ticks = float(ex.get("max_wing_spread_ticks", max_ticks))
+    short_call, short_put = _pick_leg(calls, sc, Side.SELL, 1), _pick_leg(puts, sp, Side.SELL, 1)
+    wide = [l.quote.symbol for l in (short_call, short_put) if spread_in_ticks(l.quote) > max_ticks]
     if wide:
-        raise StrategyError(f"leg quoted wider than {max_ticks:.0f} ticks: {wide}")
+        raise StrategyError(f"short leg quoted wider than {max_ticks:.0f} ticks: {wide}")
 
-    a, b = _best_ratio(call_legs, put_legs)
-    legs = [Leg(l.quote, l.side, a) for l in call_legs] + [Leg(l.quote, l.side, b) for l in put_legs]
-    d, g, t, v = package_greeks(legs)
-    if abs(d) > float(s["max_abs_net_delta_per_package"]) * max(a, b):
-        raise StrategyError(f"net delta {d:+.3f} per package outside +-{s['max_abs_net_delta_per_package']}")
-
-    credit_mid = package_credit(legs, "mid")
-    credit_nat = package_credit(legs, "natural")
-    min_credit = float(s["min_credit_pct_of_wing"]) * wing * max(a, b)
-    if credit_mid < min_credit:
-        raise StrategyError(f"credit {credit_mid:.2f} below {min_credit:.2f} (25 % of wing); premium too thin")
-    ml = max_loss_per_package(a, b, wing, credit_mid)
-    if ml <= 0:
-        raise StrategyError("non-positive max loss: pricing inconsistent")
+    # Try the configured wing first, then one strike narrower (never below the minimum): a thin
+    # credit relative to the wing is the usual reason a calm-regime condor fails the credit gate.
+    min_wing = float(s["min_wing_usd"])
+    min_pct = float(s["min_credit_pct_of_wing"])
+    errors = []
+    for w in [wing] + [wing - k * inc for k in range(1, 4) if wing - k * inc >= min_wing - 1e-9]:
+        try:
+            long_call = _pick_wing(calls, sc, w, inc, Right.CALL, max_wing_ticks, min_wing)
+            long_put = _pick_wing(puts, sp, w, inc, Right.PUT, max_wing_ticks, min_wing)
+        except StrategyError as exc:
+            errors.append(str(exc))
+            continue
+        w_eff = max(long_call.quote.strike - sc, sp - long_put.quote.strike)
+        call_legs = [short_call, long_call]
+        put_legs = [short_put, long_put]
+        a, b = _best_ratio(call_legs, put_legs)
+        legs = [Leg(l.quote, l.side, a) for l in call_legs] + [Leg(l.quote, l.side, b) for l in put_legs]
+        d, g, t, v = package_greeks(legs)
+        if abs(d) > float(s["max_abs_net_delta_per_package"]) * max(a, b):
+            errors.append(f"wing {w_eff:.0f}: net delta {d:+.3f} outside band")
+            continue
+        credit_mid = package_credit(legs, "mid")
+        credit_nat = package_credit(legs, "natural")
+        min_credit = min_pct * w_eff * max(a, b)
+        if credit_mid < min_credit:
+            errors.append(f"wing {w_eff:.0f}: credit {credit_mid:.2f} < {min_credit:.2f} ({min_pct:.0%} of wing)")
+            continue
+        ml = max_loss_per_package(a, b, w_eff, credit_mid)
+        if ml <= 0:
+            errors.append(f"wing {w_eff:.0f}: non-positive max loss")
+            continue
+        wing = w_eff
+        break
+    else:
+        raise StrategyError("no acceptable wing: " + "; ".join(errors))
 
     return CondorCandidate(
         underlying=underlying, expiry=expiry, spot=spot, implied_move=move, legs=legs,

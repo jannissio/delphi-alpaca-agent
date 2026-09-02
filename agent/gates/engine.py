@@ -86,9 +86,11 @@ class GateEngine:
 
         # 5 gate_price_collar: leg spreads in ticks (F1: percent collars veto every 0DTE contract)
         max_ticks = float(r["max_leg_spread_ticks"])
-        wide = [f"{l.quote.symbol}:{spread_in_ticks(l.quote):.0f}t" for l in cand.legs if spread_in_ticks(l.quote) > max_ticks]
-        out.append(_no("gate_price_collar", f"leg quoted wider than {max_ticks:.0f} ticks: {wide}", None, max_ticks)
-                   if wide else _ok("gate_price_collar", f"all legs within {max_ticks:.0f} ticks", None, max_ticks))
+        max_wing_ticks = float(self.s["execution"].get("max_wing_spread_ticks", max_ticks))
+        wide = [f"{l.quote.symbol}:{spread_in_ticks(l.quote):.0f}t" for l in cand.legs
+                if spread_in_ticks(l.quote) > (max_ticks if l.side == Side.SELL else max_wing_ticks)]
+        out.append(_no("gate_price_collar", f"leg quoted wider than {max_ticks:.0f}/{max_wing_ticks:.0f} ticks (short/wing): {wide}", None, max_ticks)
+                   if wide else _ok("gate_price_collar", f"shorts within {max_ticks:.0f} ticks, wings within {max_wing_ticks:.0f}", None, max_ticks))
         max_cost = float(r["max_roundtrip_cost_pct_of_credit"])
         rt_cost = 2.0 * (cand.credit_mid - cand.credit_natural)
         ratio = rt_cost / cand.credit_mid if cand.credit_mid > 0 else float("inf")

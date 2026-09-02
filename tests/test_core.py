@@ -186,7 +186,7 @@ def test_gates_reject_each_failure_mode(settings):
     st2.recent_order_keys[eng.dedupe_key(c)] = NOW - timedelta(seconds=10)
     assert "gate_duplicate_order" in names(_gate_run(settings, c, state=st2)[1])
     # 12 greeks budget
-    assert "gate_greeks_budget" in names(_gate_run(settings, c, book_greeks_usd={"delta": 9000.0})[1])
+    assert "gate_greeks_budget" in names(_gate_run(settings, c, book_greeks_usd={"delta": 25000.0})[1])
     assert "gate_greeks_budget" in names(_gate_run(settings, c, book_greeks_usd={"vega": -300.0})[1])
     # 4 defined risk: strip a wing
     naked = CondorCandidate(**{**c.__dict__, "legs": [l for l in c.legs if l.side.value == "sell"]})

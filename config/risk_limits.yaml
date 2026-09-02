@@ -42,9 +42,12 @@ duplicate_order_window_s: 60
 max_quote_age_s: 5
 max_mid_drift_pct_since_decision: 0.02
 
-# Gate 12: Greek budgets for the whole book (post-trade)
-max_abs_delta_usd: 5000           # |delta| * spot * 100 * contracts
-max_abs_gamma_usd_per_1pct: 2000  # dollar gamma for a 1 % move
+# Gate 12: Greek budgets for the whole book (post-trade). Research C found no published
+# standard; the pre-flight on 2026-09-02 showed one delta-neutral package carries ~$1,400 of
+# dollar delta at SPY 762 (0.018 delta), so the book limits below allow the full 3-position
+# session and still cap exposure at ~25 SPY-share equivalents.
+max_abs_delta_usd: 20000          # |delta| * spot * 100 * contracts
+max_abs_gamma_usd_per_1pct: 5000  # dollar gamma for a 1 % move
 max_abs_vega_usd_per_volpt: 250
 
 # Gate 13

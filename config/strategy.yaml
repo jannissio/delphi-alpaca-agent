@@ -23,7 +23,7 @@ structure:
   # F1 E-V7/E-V8: condor Sharpe rises monotonically with short distance; wings of 0.15-0.3 % of spot are untested.
   wing_width_pct_of_spot: 0.005    # wing = max(min_wing_usd, pct * spot), rounded to the strike increment
   min_wing_usd: 3.0
-  min_credit_pct_of_wing: 0.20     # reject if package credit < 20 % of wing width (F1 suggested 25 %; spread cost is gated separately by max_roundtrip_cost_pct_of_credit)
+  min_credit_pct_of_wing: 0.15     # reject if package credit < 15 % of wing (F1 suggested 25 %, but its best geometry, +-1 % shorts with 1 % wings, has a lower ratio; spread cost is gated separately)
   max_abs_net_delta_per_package: 0.05
   short_delta_min: 0.03            # cross-check only: short strikes must sit in this |delta| band
   short_delta_max: 0.25
@@ -54,7 +54,8 @@ execution:
   order_type: limit                # never market
   package_only: true               # mleg only, all legs covered in the same order
   # F1 E-F5..F13 (Fu/Li/Musto): work in ticks on the package. SPY options: $0.01 tick below $3, $0.05 above.
-  max_leg_spread_ticks: 3          # reject the structure if any leg is quoted wider than 3 ticks
+  max_leg_spread_ticks: 3          # reject if a SHORT leg is quoted wider than 3 ticks (F1 E-F5)
+  max_wing_spread_ticks: 5         # bought wings are deep OTM and cheap; up to 5 ticks, else try a neighbouring width
   walk_ticks: [0, 1, 2]            # rungs: mid, mid-1 tick, mid-2 ticks toward the natural (credit side)
   final_rung_natural: true         # Alpaca PAPER only fills marketable orders; the last rung is the natural. Fill rung is a reported process metric.
   walk_step_interval_s: 30

@@ -61,5 +61,23 @@ def anonymize(text: str) -> str:
     return out
 
 
-def anonymize_headlines(items: list[dict]) -> list[str]:
-    return [anonymize(i.get("headline", "")) for i in items if i.get("headline")]
+def anonymize_headlines(items: list[dict], now=None) -> list[str]:
+    """Masked headline text prefixed with its age in hours (the model needs recency, not dates)."""
+    from datetime import datetime, timezone
+    now = now or datetime.now(tz=timezone.utc)
+    out = []
+    for i in items:
+        h = i.get("headline")
+        if not h:
+            continue
+        age = ""
+        try:
+            ts = datetime.fromisoformat(str(i.get("created_at", "")).replace("Z", "+00:00"))
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            hours = (now - ts).total_seconds() / 3600.0
+            age = f"[{hours:.0f}h ago] " if hours >= 1 else "[<1h ago] "
+        except (ValueError, TypeError):
+            pass
+        out.append(age + anonymize(h))
+    return out
