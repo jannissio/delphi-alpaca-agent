@@ -22,6 +22,21 @@ post-session report, the determinism replay and the leakage audit are computed.
 | With 3 observations the Probabilistic Sharpe Ratio cannot reach 95 % at any performance level for fat-tailed returns | Bailey & Lopez de Prado 2014 | No Sharpe, win rate or annualised return is reported. Process metrics are |
 | Non-farm payrolls on Fri 2026-09-04 08:30 ET; ISM services Thu 10:00 ET; Broadcom earnings Wed after close | BLS, ISM, company IR | Friday is a logged NO_TRADE day; Thursday entries after 10:15 ET; no single-name earnings trades |
 
+## What was trained on history, and what it is allowed to do
+
+`scripts/history_data.py` assembles 9,230 sessions (S&P 500 since 1975 and VIX since 1990 from Cboe;
+SPY open/close since 2018 and 30-minute bars since 2024 from Alpaca IEX). `scripts/train_regime_model.py`
+fits a standardised logistic regression (with a gradient-boosting cross-check) that maps regime features
+known at the morning entry (VIX level, VIX/VIX3M slope, realised-vs-implied volatility, overnight gap,
+calendar flags) to the probability that the session ends inside the condor's short strikes. Validation is
+expanding-window, year by year, against the unconditional base rate; the out-of-sample probability terciles
+separate condor P&L monotonically on all three horizons (`docs/regime_model_report.md`). The deployed model
+(`config/regime_model.json`) can only shrink the position size: full at or above the historical tercile
+threshold, half below it, zero in the bottom decile. The same dataset gives the random-entry Monte Carlo
+null against which the campaign P&L is reported as a percentile. No direction is predicted, no options
+history exists on the basic plan, and the credit assumption (17 % of the wing, measured on the live chain)
+is stated in the report.
+
 ## Architecture
 
 ```
