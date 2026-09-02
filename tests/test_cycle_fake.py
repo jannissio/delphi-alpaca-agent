@@ -366,18 +366,19 @@ def test_ladder_requotes_before_each_rung(tmp_path, monkeypatch):
     live. Now each rung is re-derived from fresh quotes; the fill price follows the market, not the stale plan."""
     ag = build_agent(tmp_path / "rq", monkeypatch, REGIME_OK)
     ag.data.requote_scale = 0.9            # credit decays 10 % between the decision chain and the ladder
-    ag.walker.trading.fill_at_step = 1     # nothing fills at the mid rung, the second rung fills
+    ag.walker.trading.fill_at_step = 1     # nothing fills at the first rung, the second (the re-quoted natural) fills
     ag.cycle()
     recs = ag.audit.read_all()
     start = [r for r in recs if r["kind"] == "execute_start"][-1]
     subs = [r for r in recs if r["kind"] == "order_submitted"]
     opened = [r for r in recs if r["kind"] == "position_opened"]
-    assert start["requote"] and start["rung_offsets"][:3] == [0, 1, 2] and start["rung_offsets"][-1] is None
+    assert start["requote"] and start["rung_offsets"] == [1, None, None]   # mid-1 tick, natural, natural (re-quoted)
     assert len(subs) == 2 and opened, [r["kind"] for r in recs][-8:]
     planned_mid = start["candidate"]["credit_mid"]
     fresh_mid = subs[1]["fresh_mid"]
     assert fresh_mid == pytest.approx(0.9 * planned_mid, abs=0.03)          # the re-quote saw the decayed market
-    assert subs[1]["price"] == pytest.approx(round(fresh_mid - 0.01, 2), abs=1e-9)   # rung 1 = fresh mid - 1 tick
+    assert subs[0]["price"] == pytest.approx(round(subs[0]["fresh_mid"] - 0.01, 2), abs=1e-9)   # rung 0 = fresh mid - 1 tick
+    assert subs[1]["price"] == pytest.approx(round(subs[1]["fresh_natural"], 2), abs=1e-9)    # rung 1 = the fresh natural
     assert subs[1]["price"] < subs[1]["planned_price"]                       # below the stale plan
     assert opened[0]["fill_rung"] == 1 and opened[0]["position"]["entry_credit"] == pytest.approx(subs[1]["price"])
     assert subs[1]["price"] >= start["floor_credit"] - 1e-9                  # never below the gated credit floor

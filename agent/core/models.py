@@ -200,7 +200,7 @@ class CondorCandidate:
             "net_vega": round(self.net_vega, 4),
             "conformal": ({k: (round(v, 4) if isinstance(v, float) else v)
                            for k, v in self.extras["conformal"].items()
-                           if k in ("k_conformal", "k_effective", "q_mid", "p_mid", "gap", "margin", "passes")}
+                           if k in ("k_conformal", "k_effective", "q_mid", "q_nat", "q_ref", "credit_reference", "p_mid", "gap", "margin", "passes")}
                           if "conformal" in self.extras else None),
         }
 

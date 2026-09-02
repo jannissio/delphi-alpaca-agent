@@ -94,7 +94,7 @@ def main() -> None:
         led = conf_mod.ledger_for_candidate(cand, st, cp, sess)
         cand.extras["conformal"] = led
         k = led["kelly"]
-        print(f"== P vs Q ({led['rule']}): credit/wing {led['q_mid']:.3f} (call {led['q_call']:.3f}, put {led['q_put']:.3f}) vs certified payout "
+        print(f"== P vs Q ({led['rule']}): credit/wing at the {led.get('credit_reference', 'mid')} {led.get('q_ref', led['q_mid']):.3f} (mid {led['q_mid']:.3f}; call {led['q_call']:.3f}, put {led['q_put']:.3f} at mid) vs certified payout "
               f"beta* {led['beta_certified']} (empirical {led['beta_empirical']:.3f}) at k_eff {led['k_effective']:.3f} (certified_ok {led['certified_ok']}); "
               f"gap_crc {led['gap_crc']:+.3f}, gap_empirical {led['gap_empirical']:+.3f}, "
               f"gap_cov {led['gap_cov']:+.3f} (P_mid {led['p_mid']:.3f}); gate gap {led['gap']:+.3f} vs margin {led['margin']} -> "

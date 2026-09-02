@@ -23,7 +23,7 @@ defined_risk_only: true           # every short leg needs a bought wing, same ex
 collar_ticks_beyond_mid: 1
 collar_ticks_beyond_natural: 1
 price_collar_pct_of_mid: 0.25
-max_leg_spread_ticks: 3           # mirrors strategy.yaml execution.max_leg_spread_ticks
+max_leg_spread_ticks: 5           # mirrors strategy.yaml execution.max_leg_spread_ticks (3 until 2026-09-02; see docs/CONFIG_CHANGES.md)
 max_roundtrip_cost_pct_of_credit: 0.25  # reject trade if modelled round-trip cost > 25 % of credit
 
 # Gates 6-7: order value / volume (F1: cap 6 per position, slice orders at 5)

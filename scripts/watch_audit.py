@@ -47,7 +47,7 @@ def fmt(r: dict) -> str | None:
                 f"impl_ref_usd={round(s.get('impl_ref_usd', 0), 2)} spot={s.get('spot_entry')}")
     if k == "conformal":
         l, cf = r.get("ledger", {}), r.get("counterfactual_fixed", {})
-        return (f"{t} conformal credit/wing={l.get('q_mid', 0):.3f} beta*={l.get('beta_certified')} empirical_payout={l.get('beta_empirical', 0):.3f} P_mid={l.get('p_mid', 0):.3f} gap={l.get('gap', 0):+.3f} "
+        return (f"{t} conformal credit/wing@{l.get('credit_reference', 'mid')}={l.get('q_ref', l.get('q_mid', 0)):.3f} (mid {l.get('q_mid', 0):.3f}) beta*={l.get('beta_certified')} empirical_payout={l.get('beta_empirical', 0):.3f} P_mid={l.get('p_mid', 0):.3f} gap={l.get('gap', 0):+.3f} "
                 f"margin={l.get('margin')} -> {'PASS' if l.get('passes') else 'REJECT'} | fixed rule gap={cf.get('gap')}")
     if k == "conformal_eod":
         c = r.get("record", {})

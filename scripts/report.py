@@ -108,7 +108,7 @@ def build(recs: list[dict], session: str | None) -> tuple[str, dict]:
             key = (c["short_put"], c["short_call"], bool(l["passes"]))
             a = agg.setdefault(key, {"first": r["ts"][11:19], "last": r["ts"][11:19], "n": 0, "gaps": [], "q": [], "p": [],
                                      "credit": [], "cf_gap": cf.get("gap"), "cf_strikes": (cf.get("candidate") or {}).get("short_put")})
-            a["last"] = r["ts"][11:19]; a["n"] += 1; a["gaps"].append(l["gap"]); a["q"].append(l["q_mid"])
+            a["last"] = r["ts"][11:19]; a["n"] += 1; a["gaps"].append(l["gap"]); a["q"].append(l.get("q_ref", l["q_mid"]))
             a["p"].append(l.get("beta_empirical", l["p_mid"]))
             a["credit"].append(c["credit_mid"])
         if agg:

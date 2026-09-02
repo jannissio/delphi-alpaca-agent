@@ -506,6 +506,9 @@ class Agent:
         self.audit.write("chain", underlying=underlying, contracts=len(chain), quotable=sum(q.is_quotable for q in chain),
                          feed_greeks=feed_greeks, model_greeks=sum(1 for q in chain if q.delta is not None) - feed_greeks)
         self._log_event_vol(underlying, spot, chain, today, now)
+        if getattr(self, "_opens_blocked_reason", None):
+            self.audit.write("no_trade", reason=self._opens_blocked_reason)
+            return
         # Conformal Condor: today's calibrated interval fixes the short distance; the fixed rule is the counterfactual
         sess = self._conformal_interval(spot, today, now)
         if self.conformal_params.enabled and sess is None:
@@ -602,7 +605,8 @@ class Agent:
         floor_credit = float(self.s.strategy["structure"]["min_credit_pct_of_wing"]) * cand.wing_width * ratio
         if self.conformal_params.enabled and self.conformal_params.rule == "crc":
             floor_credit = max(floor_credit, (self.conformal_params.beta_target + self.conformal_params.margin) * cand.wing_width * ratio)
-        offsets: list[Optional[int]] = [int(x) for x in ex["walk_ticks"]] + ([None] if bool(ex["final_rung_natural"]) else [])
+        natural_repeats = int(ex.get("natural_rung_repeats", 1)) if bool(ex["final_rung_natural"]) else 0
+        offsets: list[Optional[int]] = [int(x) for x in ex["walk_ticks"]] + [None] * natural_repeats
         symbols = [l.quote.symbol for l in cand.legs]
         requote_on = bool(ex.get("requote_each_rung", True))
         rung_fn = tick_rung_fn(offsets, tick)
@@ -630,6 +634,10 @@ class Agent:
                               on_order_sent=self._on_order_sent, net_credit=True,
                               requote=requote if requote_on else None, rung_fn=rung_fn, n_rungs=len(offsets),
                               collar_ok_fresh=collar_ok_fresh)
+        if res.get("status") == "error" and "expiring today" in str(res.get("error", "")).lower():
+            # Alpaca's unpublished per-account cap on same-day-expiry contracts (HTTP 422): no further opens today
+            self._opens_blocked_reason = f"broker 0DTE contract limit reached: {str(res.get('error'))[:160]}"
+            self.audit.write("opens_blocked", reason=self._opens_blocked_reason)
         if res["status"] in {"filled", "partial"} and res["filled_qty"] > 0:
             filled_qty = int(res["filled_qty"])
             credit = float(res["avg_price"] or res["last_price"])

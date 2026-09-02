@@ -154,6 +154,7 @@ class ConformalParams:
     k_min: float = 0.35             # tradability clip on the radius, in implied-move units
     k_max: float = 1.60
     margin: float = 0.05            # probability points / wing fraction of cushion in the gate
+    credit_reference: str = "natural"   # gate 31 reads credit/wing at the expected fill ("natural") or at the "mid"
     horizon: str = "ratio_1030"     # history column used for the back-fill
     min_scores: int = 50            # below this the interval is not defined (state is 'cold')
     alpha_lo: float = 0.02
@@ -169,6 +170,8 @@ class ConformalParams:
         p = cls(**allowed)
         if p.rule not in ("crc", "coverage"):
             raise ValueError(f"conformal.rule must be 'crc' or 'coverage', got {p.rule!r}")
+        if p.credit_reference not in ("mid", "natural"):
+            raise ValueError(f"conformal.credit_reference must be 'mid' or 'natural', got {p.credit_reference!r}")
         return p
 
 
@@ -362,8 +365,11 @@ def ledger_for_candidate(cand: CondorCandidate, st: ConformalState, p: Conformal
     k_mid = (d_short + 0.5 * w) / impl_usd
     p_short = p_outside(scores, k_eff)
     p_mid = p_outside(scores, k_mid)
-    credit_1 = cand.credit_mid / ratio                      # credit per 1:1 package, $/share
-    q_mid = credit_1 / w                                    # = credit / wing: the market's price of the band
+    credit_1 = cand.credit_mid / ratio                      # credit per 1:1 package at the mid, $/share
+    credit_1_nat = cand.credit_natural / ratio              # ... and at the natural (sell at bid, buy at ask)
+    q_mid = credit_1 / w                                    # = credit / wing: the market's price of the band, at the mid
+    q_nat = credit_1_nat / w                                # the same price at the expected fill (paper fills only marketable orders)
+    credit_1_ref, q_ref = (credit_1_nat, q_nat) if p.credit_reference == "natural" else (credit_1, q_mid)
     q_call = (cand.short_call.quote.mid - cand.long_call.quote.mid) / w
     q_put = (cand.short_put.quote.mid - cand.long_put.quote.mid) / w
     warnings: list[str] = []
@@ -396,13 +402,14 @@ def ledger_for_candidate(cand: CondorCandidate, st: ConformalState, p: Conformal
         warnings.append(f"short strike inside the certified radius: k_eff {k_eff:.3f} < k_crc_fixed {k_cert:.3f}"
                         f" (session {k_cert_session:.3f}, at this wing {k_cert_wing:.3f})")
     beta_certified = beta_star if certified_ok else None
-    gap_crc = (q_mid - beta_certified) if beta_certified is not None else float("-inf")
-    gap_empirical = q_mid - beta_empirical
-    gap_cov = q_mid - p_mid
-    strict_gap = q_mid - p_short
+    # every gap is read at the credit reference (mid or expected fill); q_mid and q_nat are both reported
+    gap_crc = (q_ref - beta_certified) if beta_certified is not None else float("-inf")
+    gap_empirical = q_ref - beta_empirical
+    gap_cov = q_ref - p_mid
+    strict_gap = q_ref - p_short
     gate_gap = gap_crc if p.rule == "crc" else gap_cov
     payout_out = expected_payout_outside(scores, k_eff, impl_usd, w)
-    kelly = kelly_exhibit(credit_1 * 100.0, w * 100.0, 1.0 - p_short, len(scores),
+    kelly = kelly_exhibit(credit_1_ref * 100.0, w * 100.0, 1.0 - p_short, len(scores),
                           payout_out * 100.0 if payout_out is not None else None)
     return {
         "rule": p.rule,
@@ -415,15 +422,16 @@ def ledger_for_candidate(cand: CondorCandidate, st: ConformalState, p: Conformal
         "k_clipped": bool(session["clipped"]), "k_effective": k_eff, "k_mid": k_mid, "omega": omega,
         "short_distance_usd": d_short, "wing_usd": w, "ratio": ratio,
         "rounding_error_pp": p_short - p_outside(scores, float(session["k"])),
-        "p_short": p_short, "p_mid": p_mid, "q_mid": q_mid, "q_call": q_call, "q_put": q_put,
+        "p_short": p_short, "p_mid": p_mid, "q_mid": q_mid, "q_nat": q_nat, "q_ref": q_ref, "credit_reference": p.credit_reference,
+        "q_call": q_call, "q_put": q_put,
         "delta_short_call": cand.short_call.quote.delta, "delta_short_put": cand.short_put.quote.delta,
         "risk_hat": risk_hat, "beta_empirical": beta_empirical, "beta_certified": beta_certified,
         "k_crc_fixed": k_cert, "k_crc_fixed_session": k_cert_session, "k_crc_fixed_at_wing": k_cert_wing,
         "certified_ok": certified_ok,
         "gap_crc": gap_crc, "gap_empirical": gap_empirical, "gap_cov": gap_cov, "gap": gate_gap, "strict_gap": strict_gap,
         "margin": p.margin, "passes": gate_gap >= p.margin - 1e-12,
-        "ev_lower_bound_usd_per_package": (100.0 * ratio * (credit_1 - beta_certified * w)) if beta_certified is not None else None,
-        "ev_empirical_usd_per_package": 100.0 * ratio * (credit_1 - beta_empirical * w),
+        "ev_lower_bound_usd_per_package": (100.0 * ratio * (credit_1_ref - beta_certified * w)) if beta_certified is not None else None,
+        "ev_empirical_usd_per_package": 100.0 * ratio * (credit_1_ref - beta_empirical * w),
         "ev_digital_usd_per_package": 100.0 * ratio * w * gap_cov,
         "ev_hist_usd_per_package": (100.0 * ratio * (credit_1 - p_short * payout_out)) if payout_out is not None else None,
         "expected_payout_outside_usd": payout_out * 100.0 if payout_out is not None else None,

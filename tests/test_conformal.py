@@ -134,16 +134,20 @@ def test_ledger_reads_q_off_the_quote_and_certifies_p(settings):
     led = conf.ledger_for_candidate(cand, st, p, sess)
     ratio = max(cand.short_call.ratio, cand.short_put.ratio)
     assert led["q_mid"] == pytest.approx(cand.credit_mid / ratio / cand.wing_width)
+    assert led["q_nat"] == pytest.approx(cand.credit_natural / ratio / cand.wing_width)
+    assert led["q_ref"] == pytest.approx(led["q_nat"] if p.credit_reference == "natural" else led["q_mid"])
+    assert led["q_nat"] <= led["q_mid"] + 1e-12                          # the fill is never better than the mid
     assert led["q_call"] > 0 and led["q_put"] > 0
     assert 0 < led["p_mid"] <= led["p_short"] < 1                       # the midpoint lies further out
     assert led["beta_empirical"] >= led["risk_hat"] > 0
     assert led["certified_ok"] and led["beta_certified"] == p.beta_target
-    assert led["gap_crc"] == pytest.approx(led["q_mid"] - p.beta_target)
-    assert led["gap_empirical"] == pytest.approx(led["q_mid"] - led["beta_empirical"])
-    assert led["gap_cov"] == pytest.approx(led["q_mid"] - led["p_mid"])
+    assert led["gap_crc"] == pytest.approx(led["q_ref"] - p.beta_target)
+    assert led["gap_empirical"] == pytest.approx(led["q_ref"] - led["beta_empirical"])
+    assert led["gap_cov"] == pytest.approx(led["q_ref"] - led["p_mid"])
     assert led["gap"] == pytest.approx(led["gap_crc"] if p.rule == "crc" else led["gap_cov"])
     assert led["passes"] == (led["gap"] >= p.margin)
-    assert led["ev_lower_bound_usd_per_package"] == pytest.approx(100 * ratio * (cand.credit_mid / ratio - p.beta_target * cand.wing_width))
+    credit_ref = cand.credit_natural if p.credit_reference == "natural" else cand.credit_mid
+    assert led["ev_lower_bound_usd_per_package"] == pytest.approx(100 * ratio * (credit_ref / ratio - p.beta_target * cand.wing_width))
     # a strike inside the certified radius voids the certificate and the gate (Theorem 3, remark iii)
     led_in = conf.ledger_for_candidate(cand, st, p, {**sess, "k_crc_fixed": led["k_effective"] + 0.5})
     assert not led_in["certified_ok"] and led_in["beta_certified"] is None and not led_in["passes"]

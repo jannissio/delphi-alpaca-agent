@@ -149,7 +149,7 @@ th{{color:var(--muted);font-weight:600}} .ok{{color:var(--ok)}} .no{{color:var(-
             l, c, cf = r["ledger"], r["candidate"], r.get("counterfactual_fixed") or {}
             key = (r.get("session"), c["short_put"], c["short_call"], bool(l["passes"]))
             a = agg.setdefault(key, {"first": r["ts"][11:16], "last": r["ts"][11:16], "n": 0, "gap": [], "q": [], "p": [], "cf": cf.get("gap")})
-            a["last"] = r["ts"][11:16]; a["n"] += 1; a["gap"].append(l["gap"]); a["q"].append(l["q_mid"]); a["p"].append(l.get("beta_empirical", l["p_mid"]))
+            a["last"] = r["ts"][11:16]; a["n"] += 1; a["gap"].append(l["gap"]); a["q"].append(l.get("q_ref", l["q_mid"])); a["p"].append(l.get("beta_empirical", l["p_mid"]))
         rows = [[s, f"{a['first']}-{a['last']}", a["n"], f"{sp:.0f}/{sc:.0f}", f"{sum(a['q']) / a['n']:.3f}", f"{sum(a['p']) / a['n']:.3f}",
                  f"{min(a['gap']):+.3f}..{max(a['gap']):+.3f}", "<span class='ok'>TRADE</span>" if ok else "<span class='no'>NO_TRADE</span>",
                  "-" if a["cf"] is None else f"{a['cf']:+.3f}"] for (s, sp, sc, ok), a in agg.items()]

@@ -139,8 +139,20 @@ class GateEngine:
         bad = [l.quote.symbol for l in cand.legs if not l.quote.is_quotable]
         drift = abs(underlying_quote.mid - decision_mid) / decision_mid if decision_mid else 0.0
         max_drift = float(r["max_mid_drift_pct_since_decision"])
+        # strike monotonicity across the package (indicative feed artefacts seen live on 2026-09-02: a call quoted
+        # below a higher strike, a put below a lower strike): a bought wing must never be dearer than its short
+        mono = []
+        try:
+            if cand.long_call.quote.mid > cand.short_call.quote.mid + 1e-9:
+                mono.append(f"call {cand.long_call.quote.strike} mid {cand.long_call.quote.mid:.2f} > {cand.short_call.quote.strike} mid {cand.short_call.quote.mid:.2f}")
+            if cand.long_put.quote.mid > cand.short_put.quote.mid + 1e-9:
+                mono.append(f"put {cand.long_put.quote.strike} mid {cand.long_put.quote.mid:.2f} > {cand.short_put.quote.strike} mid {cand.short_put.quote.mid:.2f}")
+        except StopIteration:      # a leg is missing: gate 4 (defined risk) reports it
+            pass
         if bad:
             out.append(_no("gate_erroneous_price", f"crossed/zero quotes: {bad}"))
+        elif mono:
+            out.append(_no("gate_erroneous_price", "strike monotonicity violated (feed artefact): " + "; ".join(mono)))
         elif stale:
             out.append(_no("gate_erroneous_price", f"quotes older than {max_age:.0f}s: {stale}", None, max_age))
         elif drift > max_drift:
@@ -237,11 +249,13 @@ class GateEngine:
                 out.append(_no("gate_coverage", "short strike inside the radius certified at beta*; no certificate, no trade",
                                round(led.get("k_effective", 0), 4), round(led.get("k_crc_fixed", 0), 4)))
             else:
+                q_ref = led.get("q_ref", led["q_mid"])
+                ref = led.get("credit_reference", "mid")
                 if led.get("rule") == "crc":
-                    text = (f"credit/wing {led['q_mid']:.3f} - certified payout beta* {led.get('beta_certified')} = {led['gap']:+.3f} "
+                    text = (f"credit/wing at the {ref} {q_ref:.3f} (mid {led['q_mid']:.3f}) - certified payout beta* {led.get('beta_certified')} = {led['gap']:+.3f} "
                             f"(empirical payout at the strikes {led.get('beta_empirical', 0):.3f})")
                 else:
-                    text = f"Q_mid {led['q_mid']:.3f} - P_mid {led['p_mid']:.3f} = {led['gap']:+.3f}"
+                    text = f"Q at the {ref} {q_ref:.3f} - P_mid {led['p_mid']:.3f} = {led['gap']:+.3f}"
                 if led["gap"] >= margin - 1e-12:
                     out.append(_ok("gate_coverage", f"{text} >= margin {margin:.2f}", round(led["gap"], 4), margin))
                 else:

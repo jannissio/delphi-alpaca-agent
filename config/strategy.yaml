@@ -70,6 +70,7 @@ conformal:
   k_min: 0.35                      # tradability clip on the radius, in implied-move units; logged when it binds
   k_max: 1.60
   margin: 0.05                     # 5 % of the wing ~ $20/contract at a $4 wing ~ four legs round trip at one tick
+  credit_reference: natural        # gate 31 reads credit/wing at the expected fill (the natural: paper fills only marketable orders); the mid is logged alongside. Was mid until 2026-09-02
   wing_pct_of_spot: 0.005          # omega = wing / implied move uses the strategy wing; this is the fallback
   horizon: ratio_1030              # history column: 10:30 ET anchor to the close (scripts/history_data.py)
   min_scores: 50
@@ -78,12 +79,15 @@ execution:
   order_type: limit                # never market
   package_only: true               # mleg only, all legs covered in the same order
   # F1 E-F5..F13 (Fu/Li/Musto): work in ticks on the package. SPY options: $0.01 tick below $3, $0.05 above.
-  max_leg_spread_ticks: 3          # reject if a SHORT leg is quoted wider than 3 ticks (F1 E-F5)
+  max_leg_spread_ticks: 5          # per-leg backstop. Was 3 until 2026-09-02 (F1 E-F5); the pilot showed the 3-tick short-leg
+                                   # check rejecting feed artefacts on most 10:00-11:00 evaluations while the package round-trip
+                                   # gate (risk_limits max_roundtrip_cost_pct_of_credit) is the actual cost control. See docs/CONFIG_CHANGES.md.
   max_wing_spread_ticks: 5         # bought wings are deep OTM and cheap; up to 5 ticks, else try a neighbouring width
-  walk_ticks: [0, 1, 2]            # rungs: mid, mid-1 tick, mid-2 ticks toward the natural (credit side)
-  final_rung_natural: true         # Alpaca PAPER only fills marketable orders; the last rung is the natural. Fill rung is a reported process metric.
+  walk_ticks: [1]                  # rungs from the fresh mid toward the natural (credit side). Was [0, 1, 2] until 2026-09-02 (docs/CONFIG_CHANGES.md)
+  final_rung_natural: true         # Alpaca PAPER only fills marketable orders; the last rungs are the (re-quoted) natural. Fill rung is a reported process metric.
+  natural_rung_repeats: 2          # the natural is re-quoted and re-sent this many times (pilot: only a rung at or through the live natural fills)
   requote_each_rung: true          # re-derive every rung from fresh quotes at send time (pilot 2026-09-02: a ladder fixed at the decision chased a decaying credit)
-  walk_step_interval_s: 30
+  walk_step_interval_s: 20         # 3 rungs x 20 s: the ladder reaches the live natural inside 60 s. Was 30 s until 2026-09-02
   cancel_after_s: 150
   paper_fill_model: nbbo_when_marketable
 
