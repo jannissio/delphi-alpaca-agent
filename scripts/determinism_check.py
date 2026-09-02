@@ -55,7 +55,7 @@ def main() -> None:
         alt = FeatherlessProvider(s.featherless_key, model, seed=1234)
         res_seed = replay(alt, prompt, max(2, k // 2))
         res["seed_sensitivity"] = {"seed_1234_hashes": res_seed["decision_hashes"],
-                                   "same_family_as_seed_7": res_seed["distribution"]["strategy_family"] == res["distribution"]["strategy_family"]}
+                                   "same_family_as_seed_7": set(res_seed["distribution"]["strategy_family"]) == set(res["distribution"]["strategy_family"])}
         res["prompt_index"] = i
         out.append(res)
         print(json.dumps(res, indent=1))

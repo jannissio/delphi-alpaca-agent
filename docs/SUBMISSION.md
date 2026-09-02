@@ -15,8 +15,8 @@ probability of finishing outside, Breeden-Litzenberger 1978) and sells only if t
 the certified cost, read at the expected fill. That gate is one line with no free parameter, and by a three-line theorem
 every such trade is certified, in expectation and under exchangeability of the scores, not to lose after the modelled
 round-trip cost (docs/THEORY.md); the 5 points are that cost, not a profit target. After every session, traded or not, an
-online level (Rolling Risk Control, TMLR 2023) may tighten the radius, never widen it; today it sits at its ceiling and is
-a safety valve, which we say rather than dress up. On 618 historical sessions the realised payout ratio is 0.079 against
+online level (Rolling Risk Control, TMLR 2023) may tighten the radius, never widen it; today it has no effect on the
+interval and is a safety valve, which we say rather than dress up. On 618 historical sessions the realised payout ratio is 0.079 against
 the 0.10 certificate in every year (0.070 / 0.079 / 0.090), while the fixed strike rule most agents use drifts
 0.119 / 0.113 / 0.073. We audited the literature adversarially and the claim survived in a narrower form than we first
 wrote it: conformal methods have been applied to option prices (Bastos 2024), to market-maker positions (COPA 2020), to

@@ -67,8 +67,9 @@ the agent sells only if it exceeds `beta*` by the modelled cost. Regenerate: `py
    Two honest remarks: the certificate is marginal over calibration and test session, while gate 31 conditions on
    `credit/wing`, which itself depends on the certified radius, so the certificate conditional on the gate opening is
    not implied (Theorem 3, remark v, with the four papers that name this problem); and with the realised payout ratio
-   below `beta*` the online level sits at its ceiling, so the online layer is currently a one-sided safety valve with
-   no effect on the interval, and the Theorem 4 slack over one year (0.224) is larger than `beta*` itself.
+   below `beta*` the online level has drifted above `beta*` (0.165 after 619 sessions), so the online layer is
+   currently a one-sided safety valve with no effect on the interval, and the Theorem 4 slack over one year (0.224) is
+   larger than `beta*` itself.
 4. **The market's price of the interval.** `credit / wing`, read off the quote, is the integral of the
    risk-neutral survival function across the wing band (Lemma 2; Breeden & Litzenberger 1978). The expected
    payoff of one package is exactly `credit - E_P[payout]`.

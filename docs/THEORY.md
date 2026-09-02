@@ -143,9 +143,10 @@ larger than `beta*` itself: the bound is vacuous at the one-year horizon and mea
 parameterisation (clip range 0.14, `gamma = 0.02`) would give a slack of 0.028 and a one-year bound of 0.128; we report
 it as a pre-registered counterfactual and did not adopt it, because a four-times faster valve widens the radius after
 every full-wing loss, and the published evidence is that faster-adapting conformal variants cost growth (Ryan 2026).
-(ii) With the realised payout ratio below `beta*` throughout the back-fill, `beta_t` sits at its ceiling and
-`k_hat(beta_t) < k_hat(beta*)`, so the traded radius is the fixed-level radius: the online layer is currently a
-one-sided safety valve that binds only after a run of bad sessions, and it has no effect on today's interval. The
+(ii) With the realised payout ratio below `beta*` throughout the back-fill, `beta_t` drifts upward by about
+`gamma beta*` per clean session (0.165 after 619 sessions, against a ceiling of 0.30), so `k_hat(beta_t) < k_hat(beta*)`
+and the traded radius is the fixed-level radius: the online layer is currently a one-sided safety valve that binds
+only after a run of losses pushes `beta_t` below `beta*`, and it has no effect on today's interval. The
 recursion is the integral term of conformal PID control (Angelopoulos, Candes & Tibshirani 2023); the modern
 alternatives that remove the choice of `gamma` (DtACI, AgACI) are cited, not shipped.
 
