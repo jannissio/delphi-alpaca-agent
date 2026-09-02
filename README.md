@@ -44,6 +44,13 @@ pre-registered parameter changed after the first live cycle is listed with its r
 
 ## The Conformal Risk Control Condor (live from 2026-09-03)
 
+![Payout-ratio curve, certified curve, beta* and the certified radius](docs/risk_curve.svg)
+
+*The whole rule in one picture: the buyer's expected payout as a fraction of the wing falls with the radius; the
+black curve is the finite-sample-inflated version; where it first crosses the pre-registered `beta* = 0.10` is the
+certified radius `k_hat`, and the short strikes go there. The market's price of the same interval is `credit / wing`;
+the agent sells only if it exceeds `beta*` by the modelled cost. Regenerate: `python scripts/risk_curve.py`.*
+
 1. **Score.** For every past session, `r = |close / price_10:30 - 1| / (VIX-implied expected absolute daily move)`.
    The unit is the same in history and live, so the calibration set and the live decision never disagree
    about what "one implied move" means.
@@ -173,6 +180,7 @@ python scripts/history_data.py                # assemble state/history/daily.csv
 python scripts/conformal_backfill.py --force  # replay both online tracks through history -> state/conformal.json, docs/conformal_backfill.md
 python scripts/reproduce.py                   # recompute every number quoted in the docs and print MATCH / MISMATCH
 python scripts/evidence.py                    # anytime-valid evidence: risk and profit e-processes, evidence ceiling -> docs/evidence.md
+python scripts/risk_curve.py                  # the payout-ratio curve with beta* and k_hat -> docs/risk_curve.svg
 python scripts/preflight.py --at 10:20        # live pre-flight: interval, P vs Q, sizing, every gate; sends nothing
 AGENT_DRY_RUN=true .venv/Scripts/python -m agent.main   # logs would-be orders without sending
 .venv/Scripts/python -m agent.main            # live paper loop (updates alpha after the close by itself)

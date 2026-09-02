@@ -73,6 +73,11 @@ def main() -> None:
         values[f"backfill.realized_payout_ratio_{y}"] = b["realized_risk"]
         values[f"backfill.fixed_rule_coverage_{y}"] = backfill["fixed_by_year"][y]["coverage"]
         values[f"backfill.fixed_rule_payout_ratio_{y}"] = backfill["fixed_by_year"][y]["payout_ratio"]
+    from agent.core.config import Settings
+    s = Settings()
+    values["config.hash"] = s.config_hash                     # any silent change to risk_limits / strategy / calendar fails here
+    values["config.strategy_hash"] = s.strategy_hash[:12]
+    values["config.risk_hash"] = s.risk_hash[:12]
     import re
     collected = run([py, "-m", "pytest", "-q", "--collect-only", "--color=no", "-p", "no:cacheprovider"])
     m = re.search(r"(\d+) tests? collected", collected)

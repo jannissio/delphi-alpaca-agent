@@ -61,13 +61,32 @@ def anonymize(text: str) -> str:
     return out
 
 
+_HTML_TAG = re.compile(r"<[^>]{0,200}>")
+_HIDDEN = re.compile("[\u200b\u200c\u200d\u2060\ufeff\u00ad\u202a-\u202e\u2066-\u2069\u180e]")   # zero-width, soft hyphen, bidi controls
+HEADLINE_MAX_CHARS = 240
+
+
+def sanitize_text(text: str, max_chars: int = HEADLINE_MAX_CHARS) -> str:
+    """Defence against adversarial news (Rizvani, Apruzzese & Laskov, SaTML 2026: Unicode homoglyphs and hidden text
+    cut a news-driven strategy's annual return by up to 17.7 points): NFKC-normalise so homoglyphs collapse to their
+    ASCII forms, drop zero-width and bidi control characters, strip HTML, collapse whitespace, cap the length."""
+    import unicodedata
+    t = unicodedata.normalize("NFKC", str(text))
+    t = _HIDDEN.sub("", t)
+    t = _HTML_TAG.sub(" ", t)
+    t = "".join(ch for ch in t if ch == " " or (unicodedata.category(ch)[0] != "C"))   # other control characters
+    t = " ".join(t.split())
+    return t[:max_chars]
+
+
 def anonymize_headlines(items: list[dict], now=None) -> list[str]:
-    """Masked headline text prefixed with its age in hours (the model needs recency, not dates)."""
+    """Masked headline text prefixed with its age in hours (the model needs recency, not dates); every headline is
+    sanitised first (see sanitize_text) and the provenance tag is the age, never the source URL."""
     from datetime import datetime, timezone
     now = now or datetime.now(tz=timezone.utc)
     out = []
     for i in items:
-        h = i.get("headline")
+        h = sanitize_text(i.get("headline") or "")
         if not h:
             continue
         age = ""

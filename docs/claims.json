@@ -107,8 +107,20 @@
   "expected": 0.07286975815176366,
   "tol": 1e-06
  },
+ "config.hash": {
+  "expected": "e027d9e92c25",
+  "tol": 0.0
+ },
+ "config.strategy_hash": {
+  "expected": "dbddf5990460",
+  "tol": 0.0
+ },
+ "config.risk_hash": {
+  "expected": "83a05d4db0b5",
+  "tol": 0.0
+ },
  "tests.count": {
-  "expected": 40,
+  "expected": 42,
   "tol": 0.0
  }
 }
