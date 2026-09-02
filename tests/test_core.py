@@ -227,3 +227,19 @@ def test_entropy_and_event_move():
     ev = implied_event_move(0.2821, 1 / 12, 0.2151, 2 / 12)
     assert ev == pytest.approx(0.0745, abs=0.0005)
     assert implied_event_move(0.15, 1 / 252, 0.16, 8 / 252) is None
+
+
+def test_bs_fallback_greeks_roundtrip():
+    from agent.core.bs import bs_price, enrich_greeks, implied_vol, trading_years
+    t = trading_years(340)
+    px = bs_price(762.0, 766.0, t, 0.14, Right.CALL)
+    iv = implied_vol(px, 762.0, 766.0, t, Right.CALL)
+    assert iv == pytest.approx(0.14, abs=1e-4)
+    bare = [OptionQuote(**{**q.__dict__, "iv": None, "delta": None, "gamma": None, "theta": None, "vega": None})
+            for q in synthetic_chain(spot=762.0)]
+    rich = enrich_greeks(bare, 762.0, 340)
+    assert all(q.delta is not None for q in rich if q.is_quotable)
+    calls = {q.strike: q for q in rich if q.right == Right.CALL}
+    assert 0.4 < calls[762.0].delta < 0.6 and calls[770.0].delta < 0.2
+    puts = {q.strike: q for q in rich if q.right == Right.PUT}
+    assert -0.6 < puts[762.0].delta < -0.4

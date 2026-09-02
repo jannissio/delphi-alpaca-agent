@@ -480,3 +480,27 @@ Vollständige Quellenkarten mit Zahlen stehen in den Berichten A bis E. Hier die
 50. SEC (2013). In the Matter of Knight Capital Americas LLC, Release 34-70694. Primärquelle; festgestellter Sachverhalt.
 
 Wichtig im Write-up: Wir übernehmen die Regulatorik als Design-Vorlage und behaupten keine Compliance.
+
+---
+
+## 12. Revision am 2. September nach den Paywall-Quellen (Berichte F1 und F2)
+
+Acht der gewuenschten Quellen aus Abschnitt 10 lagen am Morgen vor. Zwei Lese-Agenten haben sie vollstaendig gelesen und gegen das Zieldesign geprueft (`research/F1_user_sources_options.md`, `research/F2_user_sources_llm_events_eval.md`). Folgende Aenderungen an Abschnitt 8 sind uebernommen:
+
+| Element | Vorher | Jetzt | Grund |
+|---|---|---|---|
+| Asymmetrie | Call-lastig, 1,25x Call und 1,5x Put | Symmetrisch, beide Shorts bei 1,10x des impliziten Move | Vilkov 2026, n = 1.319 Tage: der Risk Reversal long Call / short Put ist die einzige Struktur mit positivem Mittel, Median und P25; die Put-Seite war der reichere 0DTE-Verkauf. Die Neutralisierung im oberen VIX-Terzil entfaellt, weil Hochvol-Regime gerade dort verdienen (F1 E-V11, E-V12) |
+| Wings | 1 bis 2 Dollar | max(3 Dollar, 0,5 Prozent des Spot) | Condor-Sharpe steigt monoton mit dem Abstand der Shorts; Wings von 0,15 bis 0,3 Prozent sind ungetestet und vier Beine Halbspread fressen den Credit (F1 E-V7, E-V8) |
+| Credit-Gate | keines | Credit mindestens 20 Prozent der Wing-Breite | F1 empfiehlt 25 Prozent; 20 Prozent gewaehlt, weil die Spreadkosten separat mit 25 Prozent des Credits begrenzt sind |
+| Kontrakte | bis 10 je Order | 5 je Order, 6 je Position | F1 E-V4, E-F12 |
+| Regime-Taper | nur VIX/VIX3M | zusaetzlich halbe Groesse, wenn VIX1D im oberen Terzil der letzten 60 Sitzungen liegt | Condor-Mittel nach Terzil der impliziten Varianz +0,0016 / +0,0005 / -0,0111 Prozent, t = -0,93: Vorzeichen richtig, Signifikanz schwach, daher Taper statt Veto (F1 E-V12) |
+| Spread-Filter und Collar | 15 Prozent des Mid, 5 Prozent Collar | in Ticks: kein Bein breiter als 3 Ticks, Leiter Mid, minus 1, minus 2 Ticks, letzte Sprosse Natural; Collar nie schlechter als Natural minus 1 Tick | SEC-Studie Fu/Li/Musto: moderne 0DTE-Spreads sind zu 65 Prozent ein Tick, zu 35 Prozent zwei; Prozent-Collars haetten fast jeden Kontrakt abgelehnt (F1 E-F5 bis E-F13). Die letzte Sprosse am Natural ist eine Konzession an den Alpaca-Papiersimulator, der nur marktfaehige Orders fuellt; die Fuell-Sprosse wird als Prozessmetrik berichtet |
+| QQQ | sekundaer | gestrichen | Carr/Wu: SPX-VRP ueberlebt Bid-Preise (t = -7,44), QQQ nicht (t = -1,39) |
+| GEX | abgelehnt | abgelehnt, jetzt mit Falsifikation | Dim/Eraker/Vilkov testen den einzigen Proxy, den wir bauen koennten (Open-Interest-Gamma): kein signifikanter Effekt |
+| Kein Einstieg | nach 15:00 ET | nach 14:00 ET | letzte Stunde ist dort, wo realisierte Schiefe dominiert (F1 E-V19) |
+| LLM-Sampling | Temperatur 0 | Temperatur 0, top_p, top_k = 1, Seed; drei Stimmen, Uneinigkeit ergibt NO_TRADE; Datum maskiert | Koviazin et al.: Temperatur 0 allein laesst 0,98 Bit Entscheidungsentropie; erst alle vier Parameter ergeben 0 (F2 5.2). Chen/Kelly/Xiu: Modellgroesse ist fuer Finanztext irrelevant, Llama-3-8B schlaegt 70B |
+| Ereignisvarianz | Uhrregel | zusaetzlich geloggt: sigma_event aus zwei Verfallsterminen nach Dubinsky et al. 2019 Gleichung 4 | gibt der Freitag-Entscheidung eine gemessene Begruendung (F2 5.1); validiert am Brexit-Beispiel auf drei Nachkommastellen |
+| Earnings-Begruendung | "Broadcom uebertraf den impliziten Move in 10 von 16" | Regel bleibt, Grund korrigiert: kurze Earnings-Straddles verdienen im Mittel (Dubinsky: -7,96 Prozent Straddle-Rendite, t = -13), brauchen aber 52 Trades fuer eine 95-Prozent-Aussage; wir haetten fuenf | F2 Kernaussage 4 |
+| Bewertung | Prozessmetriken | plus die Arithmetik: MinTRL fuer Sharpe 0,5 / 1,0 / 2,0 bei Schiefe -1,5 und Kurtosis 6 = 2.860 / 751 / 207 Tage; mit T = 3 kann die Probabilistic Sharpe Ratio bei fetten Tails nie 95 Prozent erreichen; zwei getestete Konfigurationen erschoepfen das Multiple-Testing-Budget | Bailey/Lopez de Prado 2014, nachgerechnet in F2 5.3 |
+
+Unveraendert bestaetigt: definiertes Risiko, Paket-Limit-Orders, kein Stop-Loss, flat bis 15:15 ET, Freitag NO_TRADE, 2 Prozent je Sitzung, keine Sharpe-Angaben. Ehrliche Erwartung nach Vilkov: der unbedingte Condor verliert ueber den Gesamtzeitraum leicht (mittlere Sitzung -0,008 Prozent des Spot nach Kosten), 45 Prozent rote Sitzungen; 2024 bis 2026 positiv, Regime-abhaengig, kein Edge.

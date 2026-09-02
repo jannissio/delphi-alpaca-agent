@@ -16,6 +16,7 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
+from agent.core.bs import enrich_greeks
 from agent.core.clock import at_et, is_friday, market_minutes_remaining, now_et, to_et
 from agent.core.config import ROOT, STATE_DIR, Settings
 from agent.core.models import (BookPosition, CondorCandidate, CriticVerdict, OptionQuote, RegimeDecision,
@@ -183,8 +184,9 @@ class Agent:
             while nxt.weekday() >= 5:
                 nxt += timedelta(days=1)
             chain_next = self.data.chain(underlying, nxt, spot, width_pct=0.01)
-            iv0, iv1 = atm_iv(chain_today, spot), atm_iv(chain_next, spot)
             mins = market_minutes_remaining(now)
+            chain_next = enrich_greeks(chain_next, spot, mins + 390.0)
+            iv0, iv1 = atm_iv(chain_today, spot), atm_iv(chain_next, spot)
             t0 = mins / (390.0 * 252.0)
             t1 = t0 + 1.0 / 252.0
             ev = implied_event_move(iv0, t0, iv1, t1) if (iv0 and iv1) else None
@@ -279,6 +281,10 @@ class Agent:
         # mark the book
         opens = self.open_positions()
         quotes = self._leg_quotes(opens)
+        if opens and any(q.delta is None for q in quotes.values()):
+            spot_mark = self.data.underlying_quote(opens[0].underlying).mid
+            quotes = {k: v for k, v in zip(quotes.keys(), enrich_greeks(list(quotes.values()), spot_mark,
+                                                                        market_minutes_remaining(now)))}
         unreal, book_greeks = self._mark(quotes)
         session_pnl = self.state.realized_pnl + unreal
         campaign_pnl = self._campaign_pnl(unreal)
@@ -357,6 +363,10 @@ class Agent:
         except Exception as exc:
             self.audit.write("no_trade", reason=f"chain fetch failed: {str(exc)[:200]}")
             return
+        feed_greeks = sum(1 for q in chain if q.delta is not None)
+        chain = enrich_greeks(chain, spot, market_minutes_remaining(now))
+        self.audit.write("chain", underlying=underlying, contracts=len(chain), quotable=sum(q.is_quotable for q in chain),
+                         feed_greeks=feed_greeks, model_greeks=sum(1 for q in chain if q.delta is not None) - feed_greeks)
         self._log_event_vol(underlying, spot, chain, today, now)
         try:
             cand = build_condor(chain, spot, underlying, today, self.s.strategy, self.s.underlying_cfg(underlying), now)

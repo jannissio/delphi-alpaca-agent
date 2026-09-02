@@ -6,9 +6,10 @@ be covered inside the same order, limit_price is the net package price (positive
 credit for a net-credit package, debit for a net-debit package), time_in_force day.
 Paper trading fills at NBBO once the limit is marketable, with random partial fills.
 
-Walker (A-3.4, C gate 5): start at the package mid, step toward the natural side in
-fractions of the gap, cancel after the last step; every price is checked against the
-5 % collar around the decision-time mid.
+Walker (A-3.4, C gate 5, F1 E-F5..F13): start at the package mid, step one tick at a time
+toward the natural side, optionally end at the natural (Alpaca paper fills only marketable
+orders), cancel after the last rung; every price is checked against a tick collar
+(never beyond the natural, never better than the mid) plus an outer percent bound.
 """
 from __future__ import annotations
 

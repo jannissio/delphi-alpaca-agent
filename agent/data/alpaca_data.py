@@ -10,12 +10,12 @@ import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
-from alpaca.data.enums import OptionsFeed
+from alpaca.data.enums import DataFeed, OptionsFeed
 from alpaca.data.historical.option import OptionHistoricalDataClient
 from alpaca.data.historical.stock import StockHistoricalDataClient
 from alpaca.data.historical.news import NewsClient
 from alpaca.data.requests import (NewsRequest, OptionChainRequest, OptionSnapshotRequest,
-                                  StockBarsRequest, StockLatestQuoteRequest)
+                                  StockBarsRequest, StockLatestQuoteRequest, StockLatestTradeRequest)
 from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import GetOrdersRequest
@@ -80,13 +80,23 @@ class AlpacaData:
 
     # ------------------------------------------------------------------ market data
     def underlying_quote(self, symbol: str) -> UnderlyingQuote:
-        q = self.stocks.get_stock_latest_quote(StockLatestQuoteRequest(symbol_or_symbols=symbol))[symbol]
-        return UnderlyingQuote(symbol=symbol, bid=float(q.bid_price), ask=float(q.ask_price), ts=q.timestamp)
+        """IEX NBBO (the basic plan cannot query recent SIP data); falls back to the last trade
+        when one side is missing (pre-market / stale)."""
+        q = self.stocks.get_stock_latest_quote(StockLatestQuoteRequest(symbol_or_symbols=symbol, feed=DataFeed.IEX))[symbol]
+        bid, ask = float(q.bid_price or 0), float(q.ask_price or 0)
+        if bid <= 0 or ask <= 0 or ask < bid:
+            t = self.stocks.get_stock_latest_trade(StockLatestTradeRequest(symbol_or_symbols=symbol, feed=DataFeed.IEX))[symbol]
+            px = float(t.price)
+            return UnderlyingQuote(symbol=symbol, bid=px, ask=px, ts=t.timestamp)
+        return UnderlyingQuote(symbol=symbol, bid=bid, ask=ask, ts=q.timestamp)
 
     def intraday_closes(self, symbol: str, minutes: int = 5) -> list[float]:
-        start = datetime.now(tz=timezone.utc).replace(hour=13, minute=30, second=0, microsecond=0)
+        now = datetime.now(tz=timezone.utc)
+        start = now.replace(hour=13, minute=30, second=0, microsecond=0)   # 09:30 ET (EDT)
+        if now <= start + timedelta(minutes=minutes):
+            return []
         req = StockBarsRequest(symbol_or_symbols=symbol, timeframe=TimeFrame(minutes, TimeFrameUnit.Minute),
-                               start=start, limit=200)
+                               start=start, limit=200, feed=DataFeed.IEX)
         bars = self.stocks.get_stock_bars(req)
         data = bars.data.get(symbol, []) if hasattr(bars, "data") else bars[symbol]
         return [float(b.close) for b in data]
