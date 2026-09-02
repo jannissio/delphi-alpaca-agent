@@ -34,3 +34,7 @@ state/*.jsonl
 Thumbs.db
 .vscode/
 .idea/
+
+# historical downloads and simulation arrays (regenerate with scripts/history_data.py)
+state/history/
+state/*.npy

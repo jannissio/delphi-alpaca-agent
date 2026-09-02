@@ -63,13 +63,20 @@ def vix_history_closes(years: int = 10, sym: str = "VIX") -> list[float]:
             try:
                 d = datetime.strptime(row[0], "%m/%d/%Y")
                 if d.year >= cutoff_year:
-                    closes.append(float(row[4]))
+                    closes.append(float(row[-1]))   # VIX files: DATE,OPEN,HIGH,LOW,CLOSE; SPX file: DATE,SPX
             except (ValueError, IndexError):
                 continue
         return closes
     except Exception as exc:
         log.warning("cboe history failed: %s", exc)
         return []
+
+
+def recent_closes(sym: str, n: int = 30) -> list[float]:
+    """Last n daily closes of a Cboe index (SPX, VIX, VIX3M, ...). The history file ends at the
+    previous session's close, which is exactly the 'prior close' the regime model was trained on."""
+    closes = vix_history_closes(years=1, sym=sym)
+    return closes[-n:]
 
 
 def vix_terciles(closes: list[float]) -> tuple[float, float]:

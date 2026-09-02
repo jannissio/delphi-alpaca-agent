@@ -75,6 +75,19 @@ def main() -> None:
     print(f"== regime multiplier {mult} (VIX/VIX3M {ts['vix'] / ts['vix3m']:.3f}); VIX1D {ts.get('vix1d')} vs top-tercile {thr} -> half size {bool(half)}")
     if half:
         mult *= 0.5
+    rm_path = ROOT / "config" / "regime_model.json"
+    if rm_path.exists():
+        from agent.core.regime_model import RegimeModel
+        rm = RegimeModel(rm_path)
+        bars = d.daily_bars("SPY", 5)
+        open_today = bars[-1]["open"] if bars and bars[-1]["ts"].astimezone(ET).date() == today else None
+        prev_close = bars[-2]["close"] if (open_today is not None and len(bars) >= 2) else (bars[-1]["close"] if bars else None)
+        feats = rm.market_features(cboe.recent_closes("SPX", 30), cboe.recent_closes("VIX", 5), cboe.recent_closes("VIX3M", 5), prev_close, open_today)
+        feats.update(rm.calendar_flags(today))
+        out = rm.predict(feats)
+        print(f"== regime model {out.name}: p_inside {out.p_inside:.3f} -> multiplier {out.multiplier} ({out.reason})")
+        print("   features", {k: round(v, 4) for k, v in out.features.items()})
+        mult *= out.multiplier
     budget = Budget(s.capital, s.session_budget, s.campaign_budget, 0.0, 0.0, mult)
     qty = contracts_for(budget, cand.max_loss_per_package, float(s.risk["max_order_max_loss_usd"]),
                         min(int(s.risk["max_contracts_per_order"]), int(s.strategy["sizing"]["contracts_per_position_max"])),

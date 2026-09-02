@@ -21,6 +21,7 @@ from agent.core.clock import at_et, is_friday, market_minutes_remaining, now_et,
 from agent.core.config import ROOT, STATE_DIR, Settings
 from agent.core.models import (BookPosition, CondorCandidate, CriticVerdict, OptionQuote, RegimeDecision,
                                RegimeSnapshot, SessionState, StrategyFamily)
+from agent.core.regime_model import RegimeModel
 from agent.core.sizing import Budget, contracts_for, regime_multiplier
 from agent.core.strategy import (StrategyError, atm_iv, build_condor, implied_event_move, package_tick,
                                  realized_vol_annualized, straddle_implied_vol_annualized)
@@ -64,6 +65,9 @@ class Agent:
         self._snap_cache: Optional[tuple[datetime, Optional[RegimeSnapshot]]] = None
         self._vix1d_threshold: Optional[float] = None
         self._vix1d_threshold_ts: Optional[datetime] = None
+        rm_path = ROOT / "config" / "regime_model.json"
+        self.regime_model = RegimeModel(rm_path) if rm_path.exists() else None
+        self._rm_cache: Optional[tuple[datetime, object]] = None
         self._last_heartbeat = datetime.min.replace(tzinfo=timezone.utc)
         self._last_event_vol_ts = datetime.min.replace(tzinfo=timezone.utc)
         self._flattened_today = False
@@ -153,6 +157,37 @@ class Agent:
             self._vix1d_threshold_ts = now
             self.audit.write("vix1d_tercile", threshold=self._vix1d_threshold, current=snap.vix1d)
         return self._vix1d_threshold is not None and snap.vix1d >= self._vix1d_threshold
+
+    def _regime_model_multiplier(self, underlying: str, today: date, now: datetime):
+        """Evaluate the trained regime model once per hour; features use prior closes plus today's open."""
+        if self.regime_model is None:
+            return None
+        if self._rm_cache and (now - self._rm_cache[0]).total_seconds() < 3600:
+            return self._rm_cache[1]
+        try:
+            spx = cboe.recent_closes("SPX", 30)
+            vix = cboe.recent_closes("VIX", 5)
+            vix3m = cboe.recent_closes("VIX3M", 5)
+            bars = self.data.daily_bars(underlying, 5)
+            prev_close, open_today = None, None
+            if bars:
+                if to_et(bars[-1]["ts"]).date() == today:
+                    open_today = bars[-1]["open"]
+                    prev_close = bars[-2]["close"] if len(bars) >= 2 else None
+                else:
+                    prev_close = bars[-1]["close"]
+            feats = self.regime_model.market_features(spx, vix, vix3m, prev_close, open_today)
+            feats.update(self.regime_model.calendar_flags(today))
+            out = self.regime_model.predict(feats)
+        except Exception as exc:
+            self.audit.write("regime_model_error", error=str(exc)[:300])
+            out = None
+        self._rm_cache = (now, out)
+        if out is not None:
+            self.audit.write("regime_model", name=out.name, p_inside=round(out.p_inside, 4), multiplier=out.multiplier,
+                             reason=out.reason, features={k: round(v, 5) for k, v in out.features.items()},
+                             thresholds=out.thresholds)
+        return out
 
     def _regime(self, now: datetime, snap, flags, spot_change, implied_move_pct, iv_rv) -> Optional[RegimeDecision]:
         cache_s = float(self.s.strategy["regime"].get("llm_cache_s", 600))
@@ -353,6 +388,13 @@ class Agent:
             return
         if self._vix1d_half_size(snap, now):
             mult *= 0.5
+        # trained regime model (config/regime_model.json): shrink-only multiplier from history
+        rm = self._regime_model_multiplier(underlying, today, now)
+        if rm is not None:
+            mult *= rm.multiplier
+            if rm.multiplier == 0.0:
+                self.audit.write("no_trade", reason=f"regime model: {rm.reason}")
+                return
 
         # candidate from the live chain
         uq = self.data.underlying_quote(underlying)

@@ -90,6 +90,14 @@ class AlpacaData:
             return UnderlyingQuote(symbol=symbol, bid=px, ask=px, ts=t.timestamp)
         return UnderlyingQuote(symbol=symbol, bid=bid, ask=ask, ts=q.timestamp)
 
+    def daily_bars(self, symbol: str, days: int = 10) -> list[dict]:
+        """Last `days` daily IEX bars including today's partial bar (open is known after 09:30 ET)."""
+        start = datetime.now(tz=timezone.utc) - timedelta(days=days * 2 + 5)
+        req = StockBarsRequest(symbol_or_symbols=symbol, timeframe=TimeFrame.Day, start=start, feed=DataFeed.IEX, limit=days * 2)
+        bars = self.stocks.get_stock_bars(req)
+        data = bars.data.get(symbol, []) if hasattr(bars, "data") else bars[symbol]
+        return [{"ts": b.timestamp, "open": float(b.open), "close": float(b.close)} for b in data][-days:]
+
     def intraday_closes(self, symbol: str, minutes: int = 5) -> list[float]:
         now = datetime.now(tz=timezone.utc)
         start = now.replace(hour=13, minute=30, second=0, microsecond=0)   # 09:30 ET (EDT)

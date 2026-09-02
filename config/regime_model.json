@@ -1,0 +1,129 @@
+{
+  "name": "B_open_close",
+  "trained_at": "2026-09-02T08:01:07.772319+00:00",
+  "horizon": "SPY open->close, IEX daily bars 2018-11..2026-09",
+  "target": "|move| <= 0.7 x VIX-implied full-day E|move| (our 1.10x straddle geometry)",
+  "features": [
+    "vix_prev",
+    "slope_prev",
+    "rv5_over_vix",
+    "rv20_over_vix",
+    "gap",
+    "absret_prev",
+    "is_first_friday",
+    "is_third_friday",
+    "dow_0",
+    "dow_1",
+    "dow_2",
+    "dow_3"
+  ],
+  "mean": {
+    "vix_prev": 19.705779517286366,
+    "slope_prev": 0.8883010099577612,
+    "rv5_over_vix": 0.7091088617435536,
+    "rv20_over_vix": 0.770518686786812,
+    "gap": 0.0005367690022647866,
+    "absret_prev": 0.7518165895283073,
+    "is_first_friday": 0.04370515329419439,
+    "is_third_friday": 0.045662100456621,
+    "dow_0": 0.1872146118721461,
+    "dow_1": 0.20743639921722112,
+    "dow_2": 0.2054794520547945,
+    "dow_3": 0.20026092628832354
+  },
+  "std": {
+    "vix_prev": 5.293517464766605,
+    "slope_prev": 0.06441794978647657,
+    "rv5_over_vix": 0.30211660286082104,
+    "rv20_over_vix": 0.2315228875218083,
+    "gap": 0.007948210924264693,
+    "absret_prev": 0.7301995462572182,
+    "is_first_friday": 0.2045049980066958,
+    "is_third_friday": 0.20881934202357072,
+    "dow_0": 0.39021100136041587,
+    "dow_1": 0.40560307502603676,
+    "dow_2": 0.40418338892349837,
+    "dow_3": 0.4003261526290481
+  },
+  "coef": {
+    "vix_prev": -0.09504828557871495,
+    "slope_prev": -0.3952370541409204,
+    "rv5_over_vix": -0.07338819336020992,
+    "rv20_over_vix": 0.0118363063903744,
+    "gap": 0.2798547508159539,
+    "absret_prev": 0.20447559746263272,
+    "is_first_friday": -0.016771495617786743,
+    "is_third_friday": 0.07906670784713976,
+    "dow_0": 0.10305631703603024,
+    "dow_1": 0.11123372091405148,
+    "dow_2": 0.053211041475923086,
+    "dow_3": -0.036854345992636664
+  },
+  "intercept": 0.77610099932438,
+  "base_rate": 0.6764514024787998,
+  "n": 1533,
+  "thresholds": {
+    "p_half": 0.5876,
+    "p_zero": 0.4673
+  },
+  "rule": "multiplier 1.0 if p >= p_half; 0.5 if p_zero <= p < p_half; 0.0 if p < p_zero. Never above 1.0.",
+  "use_taper": true,
+  "cv": {
+    "n_oos": 1170,
+    "test_years": "2021-2026",
+    "base_rate_train": 0.8108,
+    "oos_rate": 0.6487,
+    "logit": {
+      "brier": 0.23112,
+      "brier_base": 0.25416,
+      "logloss": 0.65757,
+      "logloss_base": 0.72094,
+      "auc": 0.5575
+    },
+    "gbm": {
+      "brier": 0.23497,
+      "brier_base": 0.25416,
+      "logloss": 0.67337,
+      "logloss_base": 0.72094,
+      "auc": 0.5515
+    }
+  },
+  "buckets": [
+    {
+      "bucket": "low",
+      "n": 390,
+      "p_pred_mean": 0.491,
+      "inside_rate": 0.592,
+      "pnl_pct_mean": -0.0438,
+      "pnl_pct_median": 0.085,
+      "pnl_usd_mean_per_contract": -33.38,
+      "loss_share": 0.364
+    },
+    {
+      "bucket": "mid",
+      "n": 390,
+      "p_pred_mean": 0.645,
+      "inside_rate": 0.656,
+      "pnl_pct_mean": -0.0198,
+      "pnl_pct_median": 0.085,
+      "pnl_usd_mean_per_contract": -15.08,
+      "loss_share": 0.292
+    },
+    {
+      "bucket": "high",
+      "n": 390,
+      "p_pred_mean": 0.76,
+      "inside_rate": 0.697,
+      "pnl_pct_mean": -0.0053,
+      "pnl_pct_median": 0.085,
+      "pnl_usd_mean_per_contract": -4.01,
+      "loss_share": 0.264
+    }
+  ],
+  "assumptions": {
+    "short_multiple_of_vix_implied_day_move": 0.7,
+    "wing_pct": 0.5,
+    "credit_ratio_of_wing": 0.17,
+    "spot": 762.0
+  }
+}

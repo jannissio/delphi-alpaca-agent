@@ -84,7 +84,9 @@ class FeatherlessProvider:
             top_p=1e-6,
             max_tokens=max_tokens,
             seed=self.seed,
-            extra_body={"top_k": 1},
+            # top_k pins the fourth sampling parameter (Koviazin et al.); enable_thinking=False
+            # keeps Qwen-3.x hybrid models in direct-answer mode (ignored by models without it)
+            extra_body={"top_k": 1, "chat_template_kwargs": {"enable_thinking": False}},
         )
         try:
             resp = self.client.chat.completions.create(response_format={"type": "json_object"}, **kwargs)
