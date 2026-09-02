@@ -383,6 +383,48 @@ def test_ladder_requotes_before_each_rung(tmp_path, monkeypatch):
     assert subs[1]["price"] >= start["floor_credit"] - 1e-9                  # never below the gated credit floor
 
 
+def test_flatten_requotes_each_rung(tmp_path):
+    """Take-profit close on 2026-09-02: rungs 0.22/0.24/0.26 planned at the decision, filled only at the 0.33
+    escalation rung because the package had moved. With fresh quotes each rung follows the market."""
+    from agent.core.models import BookPosition, Right
+    from agent.execution.flatten import closing_prices, flatten_position
+    from agent.execution.orders import OrderWalker
+    from agent.reporting.audit import AuditLog
+
+    def q(sym, strike, right, bid, ask):
+        return OptionQuote(symbol=sym, underlying="SPY", expiry=date(2026, 9, 2), strike=strike, right=right,
+                           bid=bid, ask=ask, bid_size=10, ask_size=10, quote_ts=FakeClock.now(timezone.utc))
+    quotes = {"SPY260902C00769000": q("SPY260902C00769000", 769.0, Right.CALL, 0.10, 0.12),
+              "SPY260902C00772000": q("SPY260902C00772000", 772.0, Right.CALL, 0.02, 0.04),
+              "SPY260902P00763000": q("SPY260902P00763000", 763.0, Right.PUT, 0.14, 0.16),
+              "SPY260902P00760000": q("SPY260902P00760000", 760.0, Right.PUT, 0.05, 0.07)}
+    pos = BookPosition(position_id="a2f50e76546f", underlying="SPY", expiry=date(2026, 9, 2), legs=[
+        {"symbol": "SPY260902C00769000", "strike": 769.0, "right": "call", "side": "sell", "ratio": 1},
+        {"symbol": "SPY260902C00772000", "strike": 772.0, "right": "call", "side": "buy", "ratio": 1},
+        {"symbol": "SPY260902P00763000", "strike": 763.0, "right": "put", "side": "sell", "ratio": 1},
+        {"symbol": "SPY260902P00760000", "strike": 760.0, "right": "put", "side": "buy", "ratio": 1}],
+        contracts=1, entry_credit=0.44, max_loss_total=255.0, opened_ts=FakeClock.now(timezone.utc), entry_order_id="e")
+    trading = FakeTrading()
+    trading.fill_at_step = 1
+    audit = AuditLog(tmp_path / "audit.jsonl", "git", "cfg", "test")
+    mono = {"t": 0.0}
+    walker = OrderWalker(trading, audit, 30.0, 150.0, sleep=lambda s: mono.__setitem__("t", mono["t"] + s),
+                         now=lambda: mono["t"])
+    # the package debit rose 50 % between the decision snapshot and the ladder (spot drifting toward a short)
+    risen = {k: OptionQuote(**{**v.__dict__, "bid": round(v.bid * 1.5, 2), "ask": round(v.ask * 1.5, 2)})
+             for k, v in quotes.items()}
+    res = flatten_position(walker, pos, quotes, 0.25, [0.0, 0.5, 1.0], "test", on_order_sent=lambda oid, px: None,
+                           requote_quotes=lambda: risen)
+    assert res["status"] == "filled" and res["fill_step"] == 1
+    subs = [r for r in audit.read_all() if r["kind"] == "order_submitted"]
+    _, _, lad_plan = closing_prices(pos, quotes, 0.25, [0.0, 0.5, 1.0])
+    _, _, lad_fresh = closing_prices(pos, risen, 0.25, [0.0, 0.5, 1.0])
+    assert subs[1]["planned_price"] == pytest.approx(abs(lad_plan[1]))
+    assert subs[1]["price"] == pytest.approx(abs(lad_fresh[1]))
+    assert subs[1]["price"] > subs[1]["planned_price"]          # pays up to the moved market, inside the fresh collar
+    assert trading.last_signed_limit > 0                        # a close of a credit package is a debit: positive limit
+
+
 def test_reconcile_positions_accepts_alpaca_enum_strings():
     """alpaca-py stringifies enums ("PositionSide.LONG"); the pilot's false halt on 2026-09-02 came from a
     case-sensitive check that made every bought wing look short."""

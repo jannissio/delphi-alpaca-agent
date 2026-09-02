@@ -101,6 +101,16 @@ def walk_prices_ticks(mid: float, natural: float, tick: float, walk_ticks: list[
     return prices
 
 
+def tick_rung_fn(offsets: list[Optional[int]], tick: float) -> Callable[[int, float, float], float]:
+    """Rung i from fresh (mid, natural): `offsets[i]` ticks from the mid toward the natural, None = the natural."""
+    def fn(i: int, mid_now: float, nat_now: float) -> float:
+        off = offsets[min(i, len(offsets) - 1)]
+        if off is None:
+            return _round_price(nat_now)
+        return walk_prices_ticks(mid_now, nat_now, tick, [int(off)], False)[0]
+    return fn
+
+
 class OrderWalker:
     def __init__(self, trading: TradingClient, audit, step_interval_s: float, cancel_after_s: float,
                  dry_run: bool = False, sleep: Callable[[float], None] = time.sleep,
@@ -128,16 +138,17 @@ class OrderWalker:
             collar_ok: Callable[[float], bool], on_order_sent: Callable[[str, float], None],
             net_credit: bool = True,
             requote: Optional[Callable[[], Optional[tuple[float, float]]]] = None,
-            rung_offsets: Optional[list[Optional[int]]] = None, tick: float = 0.01,
+            rung_fn: Optional[Callable[[int, float, float], float]] = None, n_rungs: Optional[int] = None,
             collar_ok_fresh: Optional[Callable[[float, float, float], bool]] = None) -> dict:
         """Submit at prices[0], then cancel/replace down the ladder until filled or exhausted.
 
         prices are magnitudes; net_credit selects the Alpaca sign (negative = credit received).
-        With `requote` (fresh (mid, natural) magnitudes of the package) and `rung_offsets` (ticks from the mid,
-        None = the natural) every rung is re-derived from the quotes at the moment it is sent, and checked with
-        `collar_ok_fresh(px, mid_now, natural_now)`: a 30-second ladder computed once at the decision chases a
-        0DTE credit that decays faster than it descends (pilot 2026-09-02: three rungs, all above the natural by
-        the time they were live). `prices` stays the audited plan and the fallback when a re-quote fails.
+        With `requote` (fresh (mid, natural) of the package, signed as the caller's ladder) and
+        `rung_fn(i, mid_now, natural_now)` every one of `n_rungs` rungs is re-derived from the quotes at the moment
+        it is sent, and checked with `collar_ok_fresh(px, mid_now, natural_now)`: a 30-second ladder computed once
+        at the decision chases a 0DTE package that moves faster than it steps (pilot 2026-09-02: on the open, three
+        rungs all above the natural by the time they were live; on the take-profit close, filled only at the
+        escalation rung). `prices` stays the audited plan and the fallback when a re-quote fails.
         Returns {status, filled_qty, avg_price, order_ids, last_price, fill_step}; avg_price is a magnitude.
         """
         result = {"status": "unfilled", "filled_qty": 0.0, "avg_price": None, "order_ids": [], "last_price": None,
@@ -147,10 +158,10 @@ class OrderWalker:
                              legs=[l.model_dump() for l in legs])
             return {**result, "status": "dry_run"}
 
-        live_requote = requote is not None and bool(rung_offsets)
-        n_rungs = len(rung_offsets) if live_requote else len(prices)
+        live_requote = requote is not None and rung_fn is not None and bool(n_rungs)
+        total = int(n_rungs) if live_requote else len(prices)
         t_start = self.now()
-        for i in range(n_rungs):
+        for i in range(total):
             px = prices[min(i, len(prices) - 1)]
             planned = px
             fresh = None
@@ -162,8 +173,7 @@ class OrderWalker:
                     fresh = None
                 if fresh is not None:
                     mid_now, nat_now = fresh
-                    off = rung_offsets[i]
-                    px = _round_price(nat_now) if off is None else walk_prices_ticks(mid_now, nat_now, tick, [int(off)], False)[0]
+                    px = _round_price(abs(rung_fn(i, mid_now, nat_now)))
             ok = collar_ok_fresh(px, fresh[0], fresh[1]) if (fresh is not None and collar_ok_fresh is not None) else collar_ok(px)
             if not ok:
                 self.audit.write("order_price_rejected_by_collar", tag=tag, price=px, planned_price=planned,

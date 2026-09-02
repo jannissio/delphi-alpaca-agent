@@ -39,7 +39,7 @@ def flatten_everything(s: Settings, data: AlpacaData, audit: AuditLog, reason: s
     quotes = data.snapshots(syms)
     for p in opens:
         res = flatten_position(walker, p, quotes, float(s.risk["price_collar_pct_of_mid"]), [0.0, 0.5, 1.0], reason,
-                               on_order_sent=lambda oid, px: None)
+                               on_order_sent=lambda oid, px: None, requote_quotes=lambda: data.snapshots(syms))
         print(p.position_id, res["status"], res.get("avg_price"))
         if res["status"] in {"filled", "dry_run"}:
             p.status = "closed"

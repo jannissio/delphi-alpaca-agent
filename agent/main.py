@@ -30,7 +30,7 @@ from agent.data import cboe
 from agent.data.alpaca_data import AlpacaData
 from agent.data.calendar import flags_for, upcoming_for_prompt
 from agent.execution.flatten import flatten_position, kill_all, take_profit_hit
-from agent.execution.orders import OrderWalker, build_open_legs, walk_prices_ticks
+from agent.execution.orders import OrderWalker, build_open_legs, tick_rung_fn, walk_prices_ticks
 from agent.execution.recon import reconcile_orders, reconcile_positions
 from agent.gates.engine import GateEngine
 from agent.llm import critic as critic_mod
@@ -346,8 +346,11 @@ class Agent:
             return
         p.status = "closing"
         fractions = [0.0, 0.5, 1.0]
+        symbols = [l["symbol"] for l in p.legs]
+        requote_on = bool(self.s.strategy["execution"].get("requote_each_rung", True))
         res = flatten_position(self.walker, p, quotes, float(self.s.risk["price_collar_pct_of_mid"]), fractions, reason,
-                               on_order_sent=self._on_order_sent)
+                               on_order_sent=self._on_order_sent,
+                               requote_quotes=(lambda: self.data.snapshots(symbols)) if requote_on else None)
         if res["status"] in {"filled", "dry_run"}:
             p.status = "closed"
             p.closed_ts = datetime.now(tz=timezone.utc)
@@ -602,6 +605,7 @@ class Agent:
         offsets: list[Optional[int]] = [int(x) for x in ex["walk_ticks"]] + ([None] if bool(ex["final_rung_natural"]) else [])
         symbols = [l.quote.symbol for l in cand.legs]
         requote_on = bool(ex.get("requote_each_rung", True))
+        rung_fn = tick_rung_fn(offsets, tick)
 
         def requote() -> Optional[tuple[float, float]]:
             quotes = self.data.snapshots(symbols)
@@ -624,7 +628,7 @@ class Agent:
                          requote=requote_on, rationale=cand.rationale)
         res = self.walker.run(legs, cand.contracts, prices, tag=f"open-{cand.underlying}", collar_ok=collar_ok,
                               on_order_sent=self._on_order_sent, net_credit=True,
-                              requote=requote if requote_on else None, rung_offsets=offsets, tick=tick,
+                              requote=requote if requote_on else None, rung_fn=rung_fn, n_rungs=len(offsets),
                               collar_ok_fresh=collar_ok_fresh)
         if res["status"] in {"filled", "partial"} and res["filled_qty"] > 0:
             filled_qty = int(res["filled_qty"])
