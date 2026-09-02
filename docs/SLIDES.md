@@ -3,9 +3,13 @@
 Cover image: team_cover/Delphi_*.jpg. Tone: calm, evidence first, no hype. Every number on a slide
 has a source in `research/` or in `state/audit.jsonl`.
 
-1. **Title.** Delphi: an evidence-based 0DTE options agent on Alpaca. One line: "We do not claim a
-   statistically detectable edge. We claim a risk process that behaved exactly as specified, and one idea
-   we can defend line by line."
+1. **Title.** Delphi: an evidence-based 0DTE options agent on Alpaca. Ten seconds on the name, with the coin
+   on screen: the cover is the reverse of a Delphi silver tridrachm (c. 480 BC), four coffers with a dolphin
+   each, the pun on the city's name (delphis). Two Delphic maxims are the design: "nothing in excess" (the
+   2 % / 6 % caps) and "know thyself" (we know we have no edge and say so). The oracle spoke in categories
+   and the priests turned them into decisions: the LLM emits enums, code decides every number. One line:
+   "We do not claim a statistically detectable edge. We claim a certificate per trade, a risk process that
+   behaved exactly as specified, and one idea we can defend line by line."
 2. **The honest premise.** Over 2.5 sessions, options P&L is noise: the index variance risk premium is ~2-3 % a
    year and "over the past 15 years, option alphas have become indistinguishable from zero" (Dew-Becker & Giglio
    2025); Vilkov's 0DTE study, after the author's own 2026-08 cost correction, finds no structure with a materially
