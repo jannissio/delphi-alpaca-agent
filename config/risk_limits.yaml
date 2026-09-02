@@ -1,0 +1,85 @@
+# ---------------------------------------------------------------------------
+# RISK LIMITS - IMMUTABLE AT RUNTIME (gate 29: config_immutability)
+# Loaded once at start-up by agent.gates.config; the agent process has no code
+# path that writes this file. Every limit is derived in
+# research/C_risk_management_evaluation.md (30-gate checklist: SEC Rule 15c3-5,
+# MiFID II RTS 6, FINRA 15-09, Knight Capital 2013).
+# Amounts in USD, times in America/New_York.
+# ---------------------------------------------------------------------------
+capital_base_usd: 100000
+
+# Gates 1-3: capital thresholds and drawdown taper (Grossman & Zhou 1993)
+session_budget_pct: 0.02          # gate_capital_threshold: max loss committed per session
+campaign_budget_pct: 0.06         # gate_cumulative_drawdown: hard stop for the whole window
+taper: continuous                 # gate_drawdown_taper: budget today = session_budget * remaining/campaign
+
+# Gate 4
+defined_risk_only: true           # every short leg needs a bought wing, same expiry, same order
+
+# Gate 5: price collars, expressed in ticks (F1: percent-of-mid collars veto nearly every
+# 0DTE contract; SPY options tick $0.01 below $3, $0.05 above). A package limit may never be
+# worse than the natural by more than collar_ticks_beyond_natural, nor better than mid by
+# more than collar_ticks_beyond_mid. The percent collar is an outer sanity bound on top.
+collar_ticks_beyond_mid: 1
+collar_ticks_beyond_natural: 1
+price_collar_pct_of_mid: 0.25
+max_leg_spread_ticks: 3           # mirrors strategy.yaml execution.max_leg_spread_ticks
+max_roundtrip_cost_pct_of_credit: 0.25  # reject trade if modelled round-trip cost > 25 % of credit
+
+# Gates 6-7: order value / volume (F1: cap 6 per position, slice orders at 5)
+max_order_max_loss_usd: 1000
+max_contracts_per_order: 5
+
+# Gates 8-9: message rate and execution throttle
+max_orders_per_minute: 20
+max_orders_per_session: 200
+max_fills_per_session: 30         # halt new risk after 30 fills until manually re-enabled
+
+# Gate 10
+duplicate_order_window_s: 60
+
+# Gate 11: erroneous / stale prices
+max_quote_age_s: 5
+max_mid_drift_pct_since_decision: 0.02
+
+# Gate 12: Greek budgets for the whole book (post-trade)
+max_abs_delta_usd: 5000           # |delta| * spot * 100 * contracts
+max_abs_gamma_usd_per_1pct: 2000  # dollar gamma for a 1 % move
+max_abs_vega_usd_per_volpt: 250
+
+# Gate 13
+buying_power_safety_multiple: 1.25
+
+# Gate 14: global time window for opening risk (per-day entry windows are in strategy.yaml)
+no_new_risk_before_et: "09:45"
+no_new_risk_after_et: "15:00"
+friday_no_new_risk_after_et: "10:15"
+
+# Gate 15: flatten deadline. Alpaca stops opening 0DTE positions at 15:30 ET and
+# liquidates ITM positions from then on; OCC auto-exercise at $0.01 ITM.
+flatten_deadline_et: "15:15"
+friday_flatten_deadline_et: "10:50"
+flatten_escalation_steps: 4
+flatten_step_interval_s: 20
+
+# Gate 16
+ex_dividend_block_sessions: 2
+
+# Gates 17-18: LLM authority
+llm_may_veto: true
+llm_may_reduce: true
+llm_may_enlarge: false            # never
+llm_schema_strict: true           # reject any non-enum output; the LLM never emits numbers
+
+# Gates 19-20: kill switch and daily loss kill (independent code path from gate 1)
+kill_switch_file: "state/KILL"
+kill_switch_max_latency_s: 5
+daily_loss_kill_usd: 2000         # realised + unrealised, halts all new risk
+
+# Gates 21-22: reconciliation
+recon_every_cycle: true
+halt_on_recon_mismatch: true
+
+# Gates 23-30 (deployment and process controls) are enforced by code review,
+# the append-only audit log (state/audit.jsonl), the write-up and the
+# post-session report.

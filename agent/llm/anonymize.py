@@ -1,0 +1,65 @@
+"""Ticker and company-name anonymisation for LLM prompts.
+
+Glasserman & Lin (2023) show LLM trading behaviour changes when tickers are visible
+(memorised priors, look-ahead). We replace names with stable placeholders before any
+text reaches the model, and keep the mapping only on the code side. The mapping is also
+the basis of the leakage self-audit: the same prompt with and without masking must yield
+the same enums.
+"""
+from __future__ import annotations
+
+import re
+
+# Longest patterns first so "S&P 500" is replaced before "S&P".
+_PATTERNS: list[tuple[str, str]] = [
+    (r"\bSPDR S&P 500( ETF)?( Trust)?\b", "INDEX_ETF_A"),
+    (r"\bS&P ?500\b", "INDEX_A"),
+    (r"\bS&P\b", "INDEX_A"),
+    (r"\bSPX\b", "INDEX_A"),
+    (r"\bSPY\b", "INDEX_ETF_A"),
+    (r"\bInvesco QQQ( Trust)?\b", "INDEX_ETF_B"),
+    (r"\bNasdaq[- ]?100\b", "INDEX_B"),
+    (r"\bNasdaq\b", "INDEX_B"),
+    (r"\bQQQ\b", "INDEX_ETF_B"),
+    (r"\bDow Jones( Industrial Average)?\b", "INDEX_C"),
+    (r"\bBroadcom\b", "COMPANY_1"),
+    (r"\bAVGO\b", "COMPANY_1"),
+    (r"\bSnowflake\b", "COMPANY_2"),
+    (r"\bSNOW\b", "COMPANY_2"),
+    (r"\bHewlett Packard Enterprise\b", "COMPANY_3"),
+    (r"\bHPE\b", "COMPANY_3"),
+    (r"\bZscaler\b", "COMPANY_4"),
+    (r"\bZS\b", "COMPANY_4"),
+    (r"\bLululemon\b", "COMPANY_5"),
+    (r"\bLULU\b", "COMPANY_5"),
+    (r"\bDocuSign\b", "COMPANY_6"),
+    (r"\bDOCU\b", "COMPANY_6"),
+    (r"\bSamsara\b", "COMPANY_7"),
+    (r"\bIOT\b", "COMPANY_7"),
+    (r"\bCiena\b", "COMPANY_8"),
+    (r"\bCIEN\b", "COMPANY_8"),
+    (r"\bNvidia\b", "COMPANY_9"),
+    (r"\bNVDA\b", "COMPANY_9"),
+    (r"\bApple\b", "COMPANY_10"),
+    (r"\bAAPL\b", "COMPANY_10"),
+    (r"\bMicrosoft\b", "COMPANY_11"),
+    (r"\bMSFT\b", "COMPANY_11"),
+    (r"\bTesla\b", "COMPANY_12"),
+    (r"\bTSLA\b", "COMPANY_12"),
+    (r"\bFederal Reserve\b", "CENTRAL_BANK"),
+    (r"\bFed\b", "CENTRAL_BANK"),
+]
+_COMPILED = [(re.compile(p, re.I), r) for p, r in _PATTERNS]
+_TICKER = re.compile(r"\$[A-Z]{1,5}\b")
+
+
+def anonymize(text: str) -> str:
+    out = text
+    for rx, rep in _COMPILED:
+        out = rx.sub(rep, out)
+    out = _TICKER.sub("$TICKER", out)
+    return out
+
+
+def anonymize_headlines(items: list[dict]) -> list[str]:
+    return [anonymize(i.get("headline", "")) for i in items if i.get("headline")]

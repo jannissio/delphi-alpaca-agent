@@ -1,0 +1,13 @@
+[project]
+name = "delphi-options-agent"
+version = "0.1.0"
+description = "Autonomous, evidence-based 0DTE options agent for Alpaca paper trading. The LLM decides categories, code decides numbers."
+requires-python = ">=3.11"
+license = { text = "MIT" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 110

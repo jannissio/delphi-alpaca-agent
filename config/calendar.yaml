@@ -1,0 +1,50 @@
+# Event calendar for the evaluation window. Sources: BLS release schedule (NFP verified),
+# Federal Reserve calendar (Beige Book), ISM, company IR pages (Broadcom confirmed).
+# Times America/New_York. severity feeds EVENT_RISK and gate_event_veto.
+events:
+  - date: "2026-09-02"
+    time: "14:00"
+    name: "Fed Beige Book"
+    severity: scheduled_minor
+    pause_window_et: ["13:55", "14:15"]
+  - date: "2026-09-02"
+    time: "16:05"
+    name: "Broadcom (AVGO) Q3 FY2026 earnings, after close"
+    severity: scheduled_major
+    affects: ["QQQ"]                 # index-level gap risk at the next open; SPY minor
+  - date: "2026-09-02"
+    time: "16:05"
+    name: "Snowflake (SNOW), HPE earnings, after close"
+    severity: scheduled_minor
+  - date: "2026-09-03"
+    time: "08:30"
+    name: "Initial jobless claims, trade balance, productivity (rev.)"
+    severity: scheduled_minor
+  - date: "2026-09-03"
+    time: "10:00"
+    name: "ISM Services PMI (Aug)"
+    severity: scheduled_major
+    pause_window_et: ["09:30", "10:15"]
+  - date: "2026-09-03"
+    time: "16:05"
+    name: "Zscaler, Lululemon, DocuSign, Samsara earnings, after close"
+    severity: scheduled_minor
+  - date: "2026-09-04"
+    time: "08:30"
+    name: "BLS Employment Situation (NFP, Aug)"
+    severity: scheduled_major
+    no_trade_day: true
+  - date: "2026-09-07"
+    time: "00:00"
+    name: "Labor Day, market closed"
+    severity: scheduled_major
+    market_closed: true
+
+# Single-name earnings blocklist: the agent never trades these names in either direction
+# (research D-R16, E-D8). Listed for the LLM event flag and for the write-up.
+earnings_blocklist: [AVGO, SNOW, HPE, CIEN, ZS, LULU, DOCU, IOT]
+
+# Ex-dividend dates for gate_assignment_watch (SPY/QQQ quarterly, 3rd Friday of Mar/Jun/Sep/Dec)
+ex_dividend:
+  SPY: "2026-09-18"
+  QQQ: "2026-09-21"
