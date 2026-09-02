@@ -126,22 +126,48 @@ class OrderWalker:
 
     def run(self, legs: list[OptionLegRequest], qty: int, prices: list[float], tag: str,
             collar_ok: Callable[[float], bool], on_order_sent: Callable[[str, float], None],
-            net_credit: bool = True) -> dict:
+            net_credit: bool = True,
+            requote: Optional[Callable[[], Optional[tuple[float, float]]]] = None,
+            rung_offsets: Optional[list[Optional[int]]] = None, tick: float = 0.01,
+            collar_ok_fresh: Optional[Callable[[float, float, float], bool]] = None) -> dict:
         """Submit at prices[0], then cancel/replace down the ladder until filled or exhausted.
 
         prices are magnitudes; net_credit selects the Alpaca sign (negative = credit received).
-        Returns {status, filled_qty, avg_price, order_ids, last_price}; avg_price is a magnitude.
+        With `requote` (fresh (mid, natural) magnitudes of the package) and `rung_offsets` (ticks from the mid,
+        None = the natural) every rung is re-derived from the quotes at the moment it is sent, and checked with
+        `collar_ok_fresh(px, mid_now, natural_now)`: a 30-second ladder computed once at the decision chases a
+        0DTE credit that decays faster than it descends (pilot 2026-09-02: three rungs, all above the natural by
+        the time they were live). `prices` stays the audited plan and the fallback when a re-quote fails.
+        Returns {status, filled_qty, avg_price, order_ids, last_price, fill_step}; avg_price is a magnitude.
         """
-        result = {"status": "unfilled", "filled_qty": 0.0, "avg_price": None, "order_ids": [], "last_price": None}
+        result = {"status": "unfilled", "filled_qty": 0.0, "avg_price": None, "order_ids": [], "last_price": None,
+                  "fill_step": None}
         if self.dry_run:
             self.audit.write("order_dry_run", tag=tag, qty=qty, prices=prices, net_credit=net_credit,
                              legs=[l.model_dump() for l in legs])
             return {**result, "status": "dry_run"}
 
+        live_requote = requote is not None and bool(rung_offsets)
+        n_rungs = len(rung_offsets) if live_requote else len(prices)
         t_start = self.now()
-        for i, px in enumerate(prices):
-            if not collar_ok(px):
-                self.audit.write("order_price_rejected_by_collar", tag=tag, price=px)
+        for i in range(n_rungs):
+            px = prices[min(i, len(prices) - 1)]
+            planned = px
+            fresh = None
+            if live_requote:
+                try:
+                    fresh = requote()
+                except Exception as exc:
+                    log.warning("requote failed at rung %d: %s", i, exc)
+                    fresh = None
+                if fresh is not None:
+                    mid_now, nat_now = fresh
+                    off = rung_offsets[i]
+                    px = _round_price(nat_now) if off is None else walk_prices_ticks(mid_now, nat_now, tick, [int(off)], False)[0]
+            ok = collar_ok_fresh(px, fresh[0], fresh[1]) if (fresh is not None and collar_ok_fresh is not None) else collar_ok(px)
+            if not ok:
+                self.audit.write("order_price_rejected_by_collar", tag=tag, price=px, planned_price=planned,
+                                 fresh_mid=fresh[0] if fresh else None, fresh_natural=fresh[1] if fresh else None, step=i)
                 break
             req = mleg_limit_request(legs, qty, px, tag, net_credit)
             try:
@@ -156,7 +182,8 @@ class OrderWalker:
             result["last_price"] = px
             on_order_sent(oid, px)
             self.audit.write("order_submitted", tag=tag, order_id=oid, client_order_id=req.client_order_id,
-                             price=px, signed_limit=req.limit_price, qty=qty, step=i,
+                             price=px, signed_limit=req.limit_price, qty=qty, step=i, planned_price=planned,
+                             fresh_mid=fresh[0] if fresh else None, fresh_natural=fresh[1] if fresh else None,
                              legs=[l.model_dump() for l in legs])
 
             # poll until filled, step interval elapsed, or overall timeout
@@ -172,7 +199,7 @@ class OrderWalker:
                 if status in TERMINAL:
                     break
             if status == "filled":
-                result.update(status="filled", filled_qty=filled, avg_price=avg)
+                result.update(status="filled", filled_qty=filled, avg_price=avg, fill_step=i)
                 self.audit.write("order_filled", tag=tag, order_id=oid, price=px, avg_price=avg, qty=filled, step=i)
                 return result
             if status in {"rejected", "expired", "canceled"}:
@@ -189,7 +216,7 @@ class OrderWalker:
             except Exception:
                 pass
             if filled > 0:
-                result.update(status="partial", filled_qty=filled, avg_price=avg)
+                result.update(status="partial", filled_qty=filled, avg_price=avg, fill_step=i)
                 self.audit.write("order_partial", tag=tag, order_id=oid, price=px, avg_price=avg, qty=filled, step=i)
                 # a partial package fill is a complete condor for the filled qty; continue the ladder for the rest
                 qty = int(qty - filled)

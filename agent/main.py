@@ -19,12 +19,12 @@ from typing import Optional
 from agent.core.bs import enrich_greeks
 from agent.core.clock import at_et, is_friday, market_minutes_remaining, now_et, to_et
 from agent.core.config import ROOT, STATE_DIR, Settings
-from agent.core.models import (BookPosition, CondorCandidate, CriticVerdict, OptionQuote, RegimeDecision,
+from agent.core.models import (BookPosition, CondorCandidate, CriticVerdict, Leg, OptionQuote, RegimeDecision,
                                RegimeSnapshot, SessionState, StrategyFamily)
 from agent.core.regime_model import RegimeModel
 from agent.core.sizing import Budget, contracts_for, regime_multiplier
 from agent.core import conformal as conf_mod
-from agent.core.strategy import (StrategyError, atm_iv, build_condor, implied_event_move, package_tick, wing_width_for,
+from agent.core.strategy import (StrategyError, atm_iv, build_condor, implied_event_move, package_credit, package_tick, wing_width_for,
                                  realized_vol_annualized, straddle_implied_vol_annualized)
 from agent.data import cboe
 from agent.data.alpaca_data import AlpacaData
@@ -592,13 +592,40 @@ class Agent:
         def collar_ok(px: float) -> bool:
             return lo <= px <= hi and abs(px - cand.credit_mid) <= pct + 1e-9
 
+        # Re-quote before each rung (see OrderWalker.run). The fresh collar is tick-relative to the quotes at the
+        # moment of sending; the outer percent bound stays anchored to the decision mid, and no rung may sell the
+        # package below the credit floor the gates approved (strategy floor and, under the crc rule, gate 31).
+        ratio = max(cand.short_call.ratio, cand.short_put.ratio)
+        floor_credit = float(self.s.strategy["structure"]["min_credit_pct_of_wing"]) * cand.wing_width * ratio
+        if self.conformal_params.enabled and self.conformal_params.rule == "crc":
+            floor_credit = max(floor_credit, (self.conformal_params.beta_target + self.conformal_params.margin) * cand.wing_width * ratio)
+        offsets: list[Optional[int]] = [int(x) for x in ex["walk_ticks"]] + ([None] if bool(ex["final_rung_natural"]) else [])
+        symbols = [l.quote.symbol for l in cand.legs]
+        requote_on = bool(ex.get("requote_each_rung", True))
+
+        def requote() -> Optional[tuple[float, float]]:
+            quotes = self.data.snapshots(symbols)
+            fresh_legs = [Leg(quotes[l.quote.symbol], l.side, l.ratio) for l in cand.legs if l.quote.symbol in quotes]
+            if len(fresh_legs) != len(cand.legs) or any(not fl.quote.is_quotable for fl in fresh_legs):
+                return None
+            return package_credit(fresh_legs, "mid"), package_credit(fresh_legs, "natural")
+
+        def collar_ok_fresh(px: float, mid_now: float, nat_now: float) -> bool:
+            lo_f = nat_now - int(r["collar_ticks_beyond_natural"]) * tick - 1e-9
+            hi_f = mid_now + int(r["collar_ticks_beyond_mid"]) * tick + 1e-9
+            return (lo_f <= px <= hi_f and abs(px - cand.credit_mid) <= pct + 1e-9
+                    and px >= floor_credit - 1e-9)
+
         key = self.gates.dedupe_key(cand)
         self.state.recent_order_keys[key] = datetime.now(tz=timezone.utc)
         legs = build_open_legs(cand)
         self.audit.write("execute_start", candidate=cand.summary(), prices=prices, tick=tick,
-                         collar=[round(lo, 3), round(hi, 3)], rationale=cand.rationale)
+                         collar=[round(lo, 3), round(hi, 3)], rung_offsets=offsets, floor_credit=round(floor_credit, 3),
+                         requote=requote_on, rationale=cand.rationale)
         res = self.walker.run(legs, cand.contracts, prices, tag=f"open-{cand.underlying}", collar_ok=collar_ok,
-                              on_order_sent=self._on_order_sent, net_credit=True)
+                              on_order_sent=self._on_order_sent, net_credit=True,
+                              requote=requote if requote_on else None, rung_offsets=offsets, tick=tick,
+                              collar_ok_fresh=collar_ok_fresh)
         if res["status"] in {"filled", "partial"} and res["filled_qty"] > 0:
             filled_qty = int(res["filled_qty"])
             credit = float(res["avg_price"] or res["last_price"])
@@ -615,7 +642,9 @@ class Agent:
             self.state.positions_opened += 1
             self.state.risk_committed += pos.max_loss_total
             slippage = (cand.credit_mid - credit) * 100 * filled_qty
-            fill_rung = prices.index(res["last_price"]) if res["last_price"] in prices else None
+            fill_rung = res.get("fill_step")
+            if fill_rung is None:
+                fill_rung = prices.index(res["last_price"]) if res["last_price"] in prices else None
             self.audit.write("position_opened", position=pos.to_dict(), slippage_vs_mid_usd=round(slippage, 2),
                              fill_rung=fill_rung, rungs=len(prices), expected=cand.summary(),
                              regime=regime.__dict__, critic=cdec.__dict__)

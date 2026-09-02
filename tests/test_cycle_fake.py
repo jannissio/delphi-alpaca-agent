@@ -46,13 +46,15 @@ class FakeTrading:
         self.orders: dict[str, SimpleNamespace] = {}
         self.n = 0
         self.fill_at_rung = None    # set to a price to fill only at that price
+        self.fill_at_step = None    # or: fill only the n-th submitted order (0-based)
 
     def submit_order(self, req):
         self.n += 1
         oid = f"ord{self.n}"
         px = abs(float(req.limit_price))
         self.last_signed_limit = float(req.limit_price)
-        fill = self.fill_at_rung is not None and abs(px - self.fill_at_rung) < 1e-9
+        fill = (self.fill_at_rung is not None and abs(px - self.fill_at_rung) < 1e-9) or \
+               (self.fill_at_step is not None and self.n - 1 == self.fill_at_step)
         o = SimpleNamespace(id=oid, status="filled" if fill else "new", filled_qty=str(req.qty) if fill else "0",
                             filled_avg_price=str(px) if fill else None, client_order_id=req.client_order_id,
                             legs=req.legs, qty=req.qty)
@@ -106,8 +108,17 @@ class FakeData:
     def chain(self, underlying, expiry, spot, width_pct=0.03):
         return self._fresh(self._chain)
 
+    requote_scale = 1.0   # < 1: every option price has decayed since the decision chain was fetched
+
     def snapshots(self, symbols):
-        return {q.symbol: q for q in self._fresh(self._chain) if q.symbol in symbols}
+        out = {}
+        for q in self._fresh(self._chain):
+            if q.symbol in symbols:
+                if self.requote_scale != 1.0:
+                    q = OptionQuote(**{**q.__dict__, "bid": round(q.bid * self.requote_scale, 2),
+                                       "ask": round(q.ask * self.requote_scale, 2)})
+                out[q.symbol] = q
+        return out
 
     def headlines(self, symbols, hours=18, limit=25):
         return [{"headline": "S&P 500 flat ahead of Broadcom earnings", "created_at": "x", "symbols": ["SPY"]}]
@@ -348,3 +359,45 @@ def test_first_order_is_full_size_when_pilot_is_off(tmp_path, monkeypatch):
     assert gates["passed"], [g for g in gates["results"] if not g["passed"]]
     qty = gates["candidate"]["contracts"]
     assert 2 <= qty <= 5, qty   # more than the pilot lot, never above the per-order cap
+
+
+def test_ladder_requotes_before_each_rung(tmp_path, monkeypatch):
+    """Pilot 2026-09-02: rungs computed once at the decision were all above the natural by the time they were
+    live. Now each rung is re-derived from fresh quotes; the fill price follows the market, not the stale plan."""
+    ag = build_agent(tmp_path / "rq", monkeypatch, REGIME_OK)
+    ag.data.requote_scale = 0.9            # credit decays 10 % between the decision chain and the ladder
+    ag.walker.trading.fill_at_step = 1     # nothing fills at the mid rung, the second rung fills
+    ag.cycle()
+    recs = ag.audit.read_all()
+    start = [r for r in recs if r["kind"] == "execute_start"][-1]
+    subs = [r for r in recs if r["kind"] == "order_submitted"]
+    opened = [r for r in recs if r["kind"] == "position_opened"]
+    assert start["requote"] and start["rung_offsets"][:3] == [0, 1, 2] and start["rung_offsets"][-1] is None
+    assert len(subs) == 2 and opened, [r["kind"] for r in recs][-8:]
+    planned_mid = start["candidate"]["credit_mid"]
+    fresh_mid = subs[1]["fresh_mid"]
+    assert fresh_mid == pytest.approx(0.9 * planned_mid, abs=0.03)          # the re-quote saw the decayed market
+    assert subs[1]["price"] == pytest.approx(round(fresh_mid - 0.01, 2), abs=1e-9)   # rung 1 = fresh mid - 1 tick
+    assert subs[1]["price"] < subs[1]["planned_price"]                       # below the stale plan
+    assert opened[0]["fill_rung"] == 1 and opened[0]["position"]["entry_credit"] == pytest.approx(subs[1]["price"])
+    assert subs[1]["price"] >= start["floor_credit"] - 1e-9                  # never below the gated credit floor
+
+
+def test_reconcile_positions_accepts_alpaca_enum_strings():
+    """alpaca-py stringifies enums ("PositionSide.LONG"); the pilot's false halt on 2026-09-02 came from a
+    case-sensitive check that made every bought wing look short."""
+    from agent.execution.recon import reconcile_positions
+    book = [SimpleNamespace(status="open", contracts=1, legs=[
+        {"symbol": "SPY260902C00769000", "side": "sell", "ratio": 1},
+        {"symbol": "SPY260902C00772000", "side": "buy", "ratio": 1},
+        {"symbol": "SPY260902P00763000", "side": "sell", "ratio": 1},
+        {"symbol": "SPY260902P00760000", "side": "buy", "ratio": 1}])]
+    broker = [
+        {"symbol": "SPY260902C00769000", "asset_class": "AssetClass.US_OPTION", "qty": -1.0, "side": "PositionSide.SHORT"},
+        {"symbol": "SPY260902C00772000", "asset_class": "AssetClass.US_OPTION", "qty": 1.0, "side": "PositionSide.LONG"},
+        {"symbol": "SPY260902P00763000", "asset_class": "AssetClass.US_OPTION", "qty": -1.0, "side": "PositionSide.SHORT"},
+        {"symbol": "SPY260902P00760000", "asset_class": "AssetClass.US_OPTION", "qty": 1.0, "side": "PositionSide.LONG"}]
+    ok, problems = reconcile_positions(book, broker)
+    assert ok and problems == []
+    ok, problems = reconcile_positions(book, broker[:3])       # a missing wing is still a mismatch
+    assert not ok and "SPY260902P00760000" in problems[0]

@@ -24,9 +24,13 @@ def reconcile_positions(book: list[BookPosition], broker_positions: list[dict]) 
     exp = expected_leg_quantities(book)
     got: dict[str, int] = {}
     for bp in broker_positions:
-        if bp.get("asset_class", "").endswith("us_option") or len(bp["symbol"]) > 12:
+        # alpaca-py stringifies enums as "AssetClass.US_OPTION" / "PositionSide.LONG"; compare case-insensitively
+        # (pilot 2026-09-02: the upper-case side made every bought wing look short and halted a correct book)
+        asset = str(bp.get("asset_class", "")).lower()
+        side = str(bp.get("side", "long")).lower()
+        if asset.endswith("us_option") or len(bp["symbol"]) > 12:
             q = int(round(bp["qty"]))
-            got[bp["symbol"]] = q if "long" in bp.get("side", "long") else -abs(q)
+            got[bp["symbol"]] = abs(q) if "long" in side else -abs(q)
     problems = []
     for sym in set(exp) | set(got):
         if exp.get(sym, 0) != got.get(sym, 0):
