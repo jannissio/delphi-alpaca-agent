@@ -16,7 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from agent.core.config import STATE_DIR  # noqa: E402
+from agent.core.config import ROOT, STATE_DIR  # noqa: E402
 
 
 def load_jsonl(p: Path) -> list[dict]:
@@ -137,9 +137,10 @@ th{{color:var(--muted);font-weight:600}} .ok{{color:var(--ok)}} .no{{color:var(-
         parts.append(f"<div class='muted'>last chain: {c.get('contracts')} contracts, {c.get('quotable')} quotable, feed Greeks {c.get('feed_greeks')}, model Greeks {c.get('model_greeks')}</div>")
     parts.append("<h2>Conformal Condor: P versus Q (gate 31)</h2>")
     if conf_iv or conf_led or conf_eod:
-        parts.append("<div class='muted'>credit / wing is the market's price of the band (Breeden-Litzenberger); the certified payout is the conformal-risk-control bound "
-                     "on the expected payout to the buyer (beta* = 0.10, strikes at or beyond the certified radius); trade iff credit/wing &minus; beta* &ge; margin, "
-                     "which implies E[payoff] &ge; margin &times; wing under exchangeability (docs/THEORY.md).</div>")
+        parts.append("<div class='muted'>credit / wing, read at the expected fill, is the market's price of the band (Breeden-Litzenberger); the certified payout is the conformal-risk-control bound "
+                     "on the expected payout to the buyer (beta* = 0.10, strikes at or beyond the certified radius); trade iff credit/wing &minus; beta* &ge; margin, where the margin "
+                     "is the modelled round-trip cost, so every trade is certified, in expectation and under exchangeability, not to lose after that cost (docs/THEORY.md). "
+                     "The certificate is marginal while the gate selects; see Theorem 3, remark v. A closed gate is the mechanism working.</div>")
         rows = [[r["ts"][:16], r["session"]["date"], r["session"].get("rule"), f"{r['session'].get('beta_t', 0):.4f}", f"{r['session'].get('k_crc', 0):.3f}",
                  f"{r['session']['alpha_t']:.4f}", f"{r['session'].get('k_cov', 0):.3f}", r["session"]["n"], f"{r['session']['k']:.3f}",
                  r["session"]["vix_prev"], f"{r['session']['impl_ref_usd']:.2f}", r["session"]["spot_entry"]] for r in conf_iv]
@@ -160,6 +161,40 @@ th{{color:var(--muted);font-weight:600}} .ok{{color:var(--ok)}} .no{{color:var(-
         parts.append(table(rows, ["session", "realised ratio", "k", "payout ratio", "beta update", "coverage", "alpha update"]) if rows else "")
     else:
         parts.append("<div class='muted'>enabled from 2026-09-03; no conformal records yet</div>")
+    # ---- evidence at T = 3 (docs/THEORY.md section 9) and the rule in one picture
+    try:
+        import json as _json
+        from agent.core.evidence import evidence_ceiling, profit_wealth, risk_wealth, sessions_for_alpha
+        from scripts.evidence import traded_pairs
+        st = _json.loads((STATE_DIR / "conformal.json").read_text(encoding="utf-8"))
+        beta_star = float(st.get("params", {}).get("beta_target", 0.10))
+        losses = [float(r["loss"]) for r in st.get("ledger", []) if "loss" in r]
+        risk = risk_wealth(losses, beta_star, 1.0)
+        pairs = traded_pairs(STATE_DIR / "audit.jsonl")
+        parts.append("<h2>Evidence at T = 3: two e-processes and a ceiling</h2>")
+        parts.append(f"<div class='muted'>Risk process (evidence <em>against</em> the certificate, null E[payout ratio | past] &le; beta*): over {len(losses)} "
+                     f"calibrated sessions the running maximum is {risk['W_max']:.2f}, anytime-valid p-value {risk['p_anytime']:.2f} "
+                     f"(below 0.05 would reject the certificate). Reported, never used to halt.</div>")
+        if pairs:
+            prof = profit_wealth([(p['g'], p['l']) for p in pairs], 1.0)
+            rows = [[p["session"], f"{p['credit']:.2f}", f"{p['wing']:.0f}", f"{p['g']:.3f}", f"{p['l']:.3f}", f"{p['g'] - p['l']:+.3f}"] for p in pairs]
+            parts.append("<div class='wrap'>" + table(rows, ["session", "credit at fill", "wing", "credit/wing g", "payout ratio l", "Y = g - l"]) + "</div>")
+            parts.append(f"<div class='muted'>Profit process (evidence <em>for</em> profitability, null E[g - l | past] &le; 0): W_T = {prof['W_T']:.3f}, anytime p {prof['p_anytime']:.2f}.</div>")
+        else:
+            parts.append("<div class='muted'>Profit process: no traded session with a closed payout ratio yet.</div>")
+        parts.append(f"<div class='muted'>Ceiling: T perfect sessions at credit/wing g give at most (1/(1-g))^T; at g = 0.20 three perfect sessions reach "
+                     f"{evidence_ceiling(0.20, 3):.2f}, i.e. p &ge; {1 / evidence_ceiling(0.20, 3):.2f}, and p &le; 0.05 needs {sessions_for_alpha(0.20, 0.05)} consecutive perfect packages. "
+                     "That is why no Sharpe ratio appears on this page. Details: docs/evidence.md.</div>")
+    except Exception as exc:  # the dashboard must render even with a cold state
+        parts.append(f"<h2>Evidence at T = 3</h2><div class='muted'>not available: {esc(str(exc)[:120])}</div>")
+    svg_path = ROOT / "docs" / "risk_curve.svg"
+    if svg_path.exists():
+        parts.append("<h2>The rule in one picture</h2><div class='wrap'>" + svg_path.read_text(encoding="utf-8") + "</div>")
+        parts.append("<div class='muted'>The buyer's expected payout as a fraction of the wing falls with the radius; where the finite-sample-inflated curve first crosses "
+                     "beta* is the certified radius, and the short strikes go there. Regenerate: python scripts/risk_curve.py.</div>")
+    parts.append("<h2>Configuration changes since the first live cycle</h2><div class='muted'>Every pre-registered parameter changed after 2026-09-02 10:00 ET, with date, "
+                 "evidence and effect: <a href='https://github.com/jannissio/delphi-alpaca-agent/blob/main/docs/CONFIG_CHANGES.md'>docs/CONFIG_CHANGES.md</a>. "
+                 "Each audit record carries the config hash that produced it.</div>")
     parts.append("<h2>Journal (last entries)</h2>")
     for j in journal[-8:]:
         parts.append(f"<p><span class='muted'>{esc(j['ts'][:16])} [{esc(j['tier'])}]</span> {esc(j['entry'])}"
