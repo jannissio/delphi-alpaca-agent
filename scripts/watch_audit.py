@@ -40,6 +40,16 @@ def fmt(r: dict) -> str | None:
     if k == "llm_critic":
         d = r.get("decision") or {}
         return f"{t} llm_critic {d.get('verdict')}: {str(d.get('reason'))[:100]}"
+    if k == "conformal_interval":
+        s = r.get("session", {})
+        return f"{t} conformal_interval k={s.get('k')} alpha_t={round(s.get('alpha_t', 0), 4)} n={s.get('n')} impl_ref_usd={round(s.get('impl_ref_usd', 0), 2)} spot={s.get('spot_entry')}"
+    if k == "conformal":
+        l, cf = r.get("ledger", {}), r.get("counterfactual_fixed", {})
+        return (f"{t} conformal Q_mid={l.get('q_mid', 0):.3f} P_mid={l.get('p_mid', 0):.3f} gap={l.get('gap', 0):+.3f} "
+                f"margin={l.get('margin')} -> {'PASS' if l.get('passes') else 'REJECT'} | fixed rule gap={cf.get('gap')}")
+    if k == "conformal_eod":
+        c = r.get("record", {})
+        return f"{t} conformal_eod ratio={c.get('ratio', 0):.3f} k={c.get('k')} err={c.get('err')} alpha {c.get('alpha_before', 0):.4f} -> {c.get('alpha_after', 0):.4f}"
     if k == "regime_model":
         return f"{t} regime_model p_inside={r.get('p_inside')} multiplier={r.get('multiplier')}"
     if k in ("order_submitted", "order_filled", "order_partial", "order_terminal", "order_walk_timeout",
@@ -53,7 +63,8 @@ def fmt(r: dict) -> str | None:
     if k in ("flatten_start", "flatten_result", "flatten_failed", "flatten_deadline_reached", "flatten_skipped_no_quotes"):
         return f"{t} {k} {r.get('reason','')} {r.get('status','')} {r.get('close_natural','')}"
     if k in ("halt", "kill_switch", "kill_switch_seen", "recon_position_mismatch", "recon_order_mismatch", "cycle_error",
-             "gate", "critic_reduce", "regime_model_error", "recon_order_error", "event_vol_error", "open_not_filled", "dry_run_would_open"):
+             "gate", "critic_reduce", "regime_model_error", "recon_order_error", "event_vol_error", "open_not_filled", "dry_run_would_open",
+             "conformal_error"):
         return f"{t} !! {k}: {r.get('reason') or r.get('error') or r.get('problems') or r.get('result') or ''}"[:300]
     if k in ("agent_start", "agent_stop", "execute_start"):
         return f"{t} {k} {r.get('prices','')} {r.get('rationale','')[:120]}"

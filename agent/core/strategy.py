@@ -213,8 +213,14 @@ def wing_width_for(spot: float, s: Mapping, inc: float) -> float:
 
 
 def build_condor(chain: list[OptionQuote], spot: float, underlying: str, expiry: date,
-                 strat: Mapping, ucfg: Mapping, now: Optional[datetime] = None) -> CondorCandidate:
-    """Deterministic, symmetric iron condor from a chain snapshot. Raises StrategyError when unsafe."""
+                 strat: Mapping, ucfg: Mapping, now: Optional[datetime] = None,
+                 short_distance: Optional[float] = None) -> CondorCandidate:
+    """Deterministic, symmetric iron condor from a chain snapshot. Raises StrategyError when unsafe.
+
+    short_distance: dollar distance of both short strikes from spot. When given (the Conformal Condor,
+    agent/core/conformal.py) it replaces the fixed short_mult x straddle-implied-move rule, which then
+    serves only as the logged counterfactual.
+    """
     s = strat["structure"]
     ex = strat["execution"]
     inc = float(ucfg["strike_increment"])
@@ -223,8 +229,11 @@ def build_condor(chain: list[OptionQuote], spot: float, underlying: str, expiry:
     mult = float(s["short_mult"])
 
     calls, puts = by_strike(chain, Right.CALL), by_strike(chain, Right.PUT)
-    sc = round_to_increment(spot + mult * move, inc, "up")
-    sp = round_to_increment(spot - mult * move, inc, "down")
+    dist = float(short_distance) if short_distance is not None else mult * move
+    if dist <= 0:
+        raise StrategyError(f"non-positive short distance {dist}")
+    sc = round_to_increment(spot + dist, inc, "up")
+    sp = round_to_increment(spot - dist, inc, "down")
     sc = _shift_into_delta_band(calls, sc, Right.CALL, s["short_delta_min"], s["short_delta_max"], inc, spot)
     sp = _shift_into_delta_band(puts, sp, Right.PUT, s["short_delta_min"], s["short_delta_max"], inc, spot)
     if sc <= spot or sp >= spot:
@@ -278,7 +287,9 @@ def build_condor(chain: list[OptionQuote], spot: float, underlying: str, expiry:
         max_loss_per_package=ml, net_delta=d, net_gamma=g, net_theta=t, net_vega=v,
         created_ts=now or datetime.now(tz=timezone.utc),
         rationale=(f"ATM {atm_k} straddle {straddle:.2f} -> implied move {move:.2f} ({move / spot:.2%}); "
-                   f"shorts {sp}/{sc} at {mult:.2f}x, wings {wing:.0f} wide, ratio {a}:{b}, net delta {d:+.3f}, "
+                   + (f"shorts {sp}/{sc} at conformal distance {dist:.2f}, " if short_distance is not None
+                      else f"shorts {sp}/{sc} at {mult:.2f}x, ")
+                   + f"wings {wing:.0f} wide, ratio {a}:{b}, net delta {d:+.3f}, "
                    f"credit {credit_mid:.2f} mid / {credit_nat:.2f} natural, max loss {ml:.0f}/package"),
     )
 

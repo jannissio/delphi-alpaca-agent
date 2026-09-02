@@ -48,6 +48,10 @@ def build(recs: list[dict], session: str | None) -> tuple[str, dict]:
     order_subs = [r for r in recs if r["kind"] == "order_submitted"]
     fills = [r for r in recs if r["kind"] == "order_filled"]
     event_vols = [r for r in recs if r["kind"] == "event_vol"]
+    conf_iv = [r for r in recs if r["kind"] == "conformal_interval"]
+    conf_led = [r for r in recs if r["kind"] == "conformal"]
+    conf_eod = [r for r in recs if r["kind"] == "conformal_eod"]
+    conf_err = [r for r in recs if r["kind"] == "conformal_error"]
 
     pnl = sum(r.get("pnl", 0.0) for r in closed)
     slippage = sum(r.get("slippage_vs_mid_usd", 0.0) for r in opened)
@@ -88,6 +92,37 @@ def build(recs: list[dict], session: str | None) -> tuple[str, dict]:
         ev = event_vols[-1]
         lines += ["", "## Term-structure event variance (Dubinsky et al. 2019 Eq. 4)",
                   f"- last reading: sigma_event = {ev.get('sigma_event')} between {ev.get('expiry_short')} and {ev.get('expiry_long')} (IV {ev.get('iv_short')} vs {ev.get('iv_long')})"]
+    if conf_iv or conf_led or conf_eod or conf_err:
+        lines += ["", "## Conformal Condor: P-versus-Q ledger (gate 31)",
+                  "Q_mid = credit / wing read off the quote (risk-neutral probability of finishing beyond the spread midpoint); "
+                  "P_mid = conformal p-value of the same distance in the trailing calibration scores. Trade iff Q_mid - P_mid >= margin."]
+        for r in conf_iv:
+            s = r["session"]
+            lines.append(f"- interval committed {r['ts'][:19]}: alpha_t {s['alpha_t']:.4f}, n {s['n']}, k {s['k']:.3f} "
+                         f"(clipped {s['clipped']}), VIX prev {s['vix_prev']}, implied ref move {s['impl_ref_usd']:.2f} $, anchor spot {s['spot_entry']}")
+        # one row per distinct (strikes, decision), with the evaluation count and the gap range
+        agg: dict = {}
+        for r in conf_led:
+            l, c, cf = r["ledger"], r["candidate"], r.get("counterfactual_fixed") or {}
+            key = (c["short_put"], c["short_call"], bool(l["passes"]))
+            a = agg.setdefault(key, {"first": r["ts"][11:19], "last": r["ts"][11:19], "n": 0, "gaps": [], "q": [], "p": [],
+                                     "credit": [], "cf_gap": cf.get("gap"), "cf_strikes": (cf.get("candidate") or {}).get("short_put")})
+            a["last"] = r["ts"][11:19]; a["n"] += 1; a["gaps"].append(l["gap"]); a["q"].append(l["q_mid"]); a["p"].append(l["p_mid"])
+            a["credit"].append(c["credit_mid"])
+        if agg:
+            lines += ["", "| UTC first-last | n | shorts | credit mid | Q_mid | P_mid | gap (min..max) | decision | fixed-rule gap |",
+                      "|---|---|---|---|---|---|---|---|---|"]
+            for (sp, sc, ok), a in agg.items():
+                lines.append(f"| {a['first']}-{a['last']} | {a['n']} | {sp:.0f}/{sc:.0f} | {sum(a['credit']) / a['n']:.3f} | "
+                             f"{sum(a['q']) / a['n']:.3f} | {sum(a['p']) / a['n']:.3f} | {min(a['gaps']):+.3f}..{max(a['gaps']):+.3f} | "
+                             f"{'TRADE' if ok else 'NO_TRADE'} | {a['cf_gap'] if a['cf_gap'] is None else format(a['cf_gap'], '+.3f')} |")
+        for r in conf_eod:
+            c = r["record"]
+            lines.append(f"- after the close: realised ratio {c['ratio']:.3f} vs k {c['k']:.3f} -> "
+                         f"{'OUTSIDE' if c['err'] else 'inside'}; alpha {c['alpha_before']:.4f} -> {c['alpha_after']:.4f}"
+                         f"{' (interval reconstructed at the 10:30 bar)' if c.get('reconstructed') else ''}")
+        for r in conf_err[-5:]:
+            lines.append(f"- error {r['ts'][:19]}: {r.get('error')}")
     if marks:
         eq = [m["equity"] for m in marks]
         lines += ["", "## Equity marks", f"- first {eq[0]:.2f}, last {eq[-1]:.2f}, min {min(eq):.2f}, max {max(eq):.2f} over {len(eq)} marks"]
@@ -100,7 +135,10 @@ def build(recs: list[dict], session: str | None) -> tuple[str, dict]:
                "gate_fail": dict(gate_fail), "no_trade": dict(no_trade), "opened": len(opened), "closed": len(closed),
                "pnl_realized": pnl, "slippage_usd": slippage, "fill_rungs": {str(k): v for k, v in rungs.items()},
                "llm_latency_ms": lat, "critic_verdicts": dict(verdicts), "families": dict(families),
-               "unanimity": dict(unanimous), "entropies": entropies}
+               "unanimity": dict(unanimous), "entropies": entropies,
+               "conformal": {"intervals": [r["session"] for r in conf_iv], "evaluations": len(conf_led),
+                             "decisions": dict(Counter("TRADE" if r["ledger"]["passes"] else "NO_TRADE" for r in conf_led)),
+                             "eod": [r["record"] for r in conf_eod], "errors": len(conf_err)}}
     return "\n".join(lines), summary
 
 

@@ -23,6 +23,7 @@ from agent.core.models import (BookPosition, CondorCandidate, CriticVerdict, Opt
                                RegimeSnapshot, SessionState, StrategyFamily)
 from agent.core.regime_model import RegimeModel
 from agent.core.sizing import Budget, contracts_for, regime_multiplier
+from agent.core import conformal as conf_mod
 from agent.core.strategy import (StrategyError, atm_iv, build_condor, implied_event_move, package_tick,
                                  realized_vol_annualized, straddle_implied_vol_annualized)
 from agent.data import cboe
@@ -68,6 +69,10 @@ class Agent:
         rm_path = ROOT / "config" / "regime_model.json"
         self.regime_model = RegimeModel(rm_path) if rm_path.exists() else None
         self._rm_cache: Optional[tuple[datetime, object]] = None
+        self.conformal_params = conf_mod.ConformalParams.from_config(self.s.strategy.get("conformal"))
+        self.conformal_path = STATE_DIR / "conformal.json"
+        self.conformal: Optional[conf_mod.ConformalState] = None
+        self._conformal_eod_ts = datetime.min.replace(tzinfo=timezone.utc)
         self._last_heartbeat = datetime.min.replace(tzinfo=timezone.utc)
         self._last_event_vol_ts = datetime.min.replace(tzinfo=timezone.utc)
         self._flattened_today = False
@@ -189,6 +194,89 @@ class Agent:
                              thresholds=out.thresholds)
         return out
 
+    # ------------------------------------------------------------------ conformal condor (gate 31)
+    def _load_conformal(self) -> Optional[conf_mod.ConformalState]:
+        if self.conformal is not None:
+            return self.conformal
+        try:
+            self.conformal = conf_mod.ConformalState.load(self.conformal_path)
+        except Exception as exc:
+            self.audit.write("conformal_error", error=f"state load failed: {str(exc)[:200]}", path=str(self.conformal_path))
+            return None
+        return self.conformal
+
+    def _conformal_interval(self, spot: float, today: date, now: datetime) -> Optional[dict]:
+        """Today's calibrated interval, committed once per session at the first evaluation inside the entry
+        window and persisted, so a restart cannot re-draw it. None when disabled or unavailable."""
+        p = self.conformal_params
+        if not p.enabled:
+            return None
+        st = self._load_conformal()
+        if st is None:
+            return None
+        if st.session and st.session.get("date") == today.isoformat():
+            return st.session
+        try:
+            vix_prev = cboe.closes_before("VIX", today, 1)[-1]
+            sess = conf_mod.open_session(st, p, today, now, spot, vix_prev)
+            st.save(self.conformal_path)
+        except Exception as exc:
+            self.audit.write("conformal_error", error=f"interval: {str(exc)[:200]}")
+            return None
+        self.audit.write("conformal_interval", session=sess, params=self.conformal_params.__dict__)
+        return sess
+
+    def _conformal_ledger(self, cand: CondorCandidate, chain, spot: float, underlying: str, today: date,
+                          now: datetime, sess: dict) -> None:
+        """P-vs-Q ledger for the candidate (gate 31 input) plus the fixed-rule counterfactual, both audited."""
+        p = self.conformal_params
+        try:
+            ledger = conf_mod.ledger_for_candidate(cand, self.conformal, p, sess)
+        except Exception as exc:
+            self.audit.write("conformal_error", error=f"ledger: {str(exc)[:200]}")
+            return
+        cand.extras["conformal"] = ledger
+        try:
+            fixed = build_condor(chain, spot, underlying, today, self.s.strategy, self.s.underlying_cfg(underlying), now)
+            fl = conf_mod.ledger_for_candidate(fixed, self.conformal, p, sess)
+            cf = {"candidate": fixed.summary(), "k_effective": fl["k_effective"], "q_mid": fl["q_mid"],
+                  "p_mid": fl["p_mid"], "gap": fl["gap"], "passes": fl["passes"]}
+        except Exception as exc:
+            cf = {"error": str(exc)[:200]}
+        self.audit.write("conformal", ledger=ledger, counterfactual_fixed=cf, candidate=cand.summary())
+
+    def _conformal_eod(self, today: date, now: datetime) -> None:
+        """After the close: score today's interval and move alpha (every session, traded or not). If no
+        interval was committed during the day, reconstruct it at the 10:30 ET bar exactly as the history does."""
+        p = self.conformal_params
+        if not p.enabled:
+            return
+        et = to_et(now)
+        if et.weekday() >= 5 or (et.hour, et.minute) < (16, 10):
+            return
+        if (now - self._conformal_eod_ts).total_seconds() < 600:
+            return
+        self._conformal_eod_ts = now
+        st = self._load_conformal()
+        if st is None or st.updated_through >= today.isoformat():
+            return
+        underlying = self.s.enabled_underlyings()[0]
+        try:
+            bars = self.data.intraday_bars(underlying, 30, today)
+            if not bars or bars[-1]["et"] < "15:30":
+                return                          # holiday, or the last bar is not in yet
+            close = bars[-1]["close"]
+            if not (st.session and st.session.get("date") == today.isoformat()):
+                p_entry = next(b["close"] for b in bars if b["et"] == "10:00")
+                vix_prev = cboe.closes_before("VIX", today, 1)[-1]
+                conf_mod.open_session(st, p, today, now, p_entry, vix_prev, reconstructed=True)
+            rec = conf_mod.eod_update(st, p, close, today)
+            st.save(self.conformal_path)
+        except Exception as exc:
+            self.audit.write("conformal_error", error=f"eod: {str(exc)[:200]}")
+            return
+        self.audit.write("conformal_eod", record=rec, n_scores=len(st.scores))
+
     def _regime(self, now: datetime, snap, flags, spot_change, implied_move_pct, iv_rv) -> Optional[RegimeDecision]:
         cache_s = float(self.s.strategy["regime"].get("llm_cache_s", 600))
         if self._regime_cache and (now - self._regime_cache[0]).total_seconds() < cache_s:
@@ -296,6 +384,7 @@ class Agent:
 
         clock = self.data.clock()
         if not clock["is_open"]:
+            self._conformal_eod(today, now)
             self._heartbeat("market closed", now)
             return
 
@@ -410,11 +499,20 @@ class Agent:
         self.audit.write("chain", underlying=underlying, contracts=len(chain), quotable=sum(q.is_quotable for q in chain),
                          feed_greeks=feed_greeks, model_greeks=sum(1 for q in chain if q.delta is not None) - feed_greeks)
         self._log_event_vol(underlying, spot, chain, today, now)
+        # Conformal Condor: today's calibrated interval fixes the short distance; the fixed rule is the counterfactual
+        sess = self._conformal_interval(spot, today, now)
+        if self.conformal_params.enabled and sess is None:
+            self.audit.write("no_trade", reason="conformal interval unavailable (state cold or VIX history missing); no new risk")
+            return
+        short_distance = sess["k"] * sess["impl_ref_usd"] if sess else None
         try:
-            cand = build_condor(chain, spot, underlying, today, self.s.strategy, self.s.underlying_cfg(underlying), now)
+            cand = build_condor(chain, spot, underlying, today, self.s.strategy, self.s.underlying_cfg(underlying), now,
+                                short_distance=short_distance)
         except StrategyError as exc:
             self.audit.write("no_trade", reason=f"strategy: {exc}")
             return
+        if sess is not None:
+            self._conformal_ledger(cand, chain, spot, underlying, today, now, sess)
         mins_left = market_minutes_remaining(now)
         iv_ann = straddle_implied_vol_annualized(cand.implied_move, spot, mins_left)
         iv_rv = (iv_ann / snap.realized_vol_annualized) if (iv_ann and snap.realized_vol_annualized) else None

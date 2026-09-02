@@ -1,4 +1,5 @@
-"""The 30 risk gates (research/C_risk_management_evaluation.md, section 8).
+"""The 30 risk gates (research/C_risk_management_evaluation.md, section 8) plus gate 31, the coverage
+gate of the Conformal Condor (research/G_conformal_condor.md).
 
 Pre-trade gates run on every candidate order and every gate must pass. Each gate is a
 small pure function returning a GateResult so the audit log shows the value, the limit
@@ -219,6 +220,28 @@ class GateEngine:
         out.append(_ok("gate_positions_per_session", "position count within cap", state.positions_opened, cap)
                    if state.positions_opened < cap else
                    _no("gate_positions_per_session", "positions-per-session cap reached", state.positions_opened, cap))
+
+        # 31 gate_coverage (Conformal Condor): the market must pay more for the interval than the
+        # calibration says it is worth, by a pre-registered margin. Q is read off the quote
+        # (credit / wing, Breeden-Litzenberger digital limit); P is the conformal p-value of the same
+        # distance in the calibration scores. Both numbers are in the audit record.
+        ccfg = self.s.get("conformal") or {}
+        if ccfg.get("enabled", False):
+            led = cand.extras.get("conformal") if hasattr(cand, "extras") else None
+            margin = float(ccfg.get("margin", 0.05))
+            if not led:
+                out.append(_no("gate_coverage", "conformal ledger missing for this candidate", None, margin))
+            elif any("non-positive" in w for w in led.get("warnings", [])):
+                out.append(_no("gate_coverage", "; ".join(led["warnings"])[:200], round(led["gap"], 4), margin))
+            elif led["gap"] >= margin - 1e-12:
+                out.append(_ok("gate_coverage", f"Q_mid {led['q_mid']:.3f} - P_mid {led['p_mid']:.3f} = "
+                                                f"{led['gap']:+.3f} >= margin {margin:.2f}", round(led["gap"], 4), margin))
+            else:
+                out.append(_no("gate_coverage", f"Q_mid {led['q_mid']:.3f} - P_mid {led['p_mid']:.3f} = "
+                                                f"{led['gap']:+.3f} < margin {margin:.2f}: the market does not pay "
+                                                f"for this interval", round(led["gap"], 4), margin))
+        else:
+            out.append(_ok("gate_coverage", "coverage gate disabled (fixed strike rule)"))
         return out
 
     @staticmethod

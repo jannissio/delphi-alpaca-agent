@@ -8,7 +8,7 @@ from __future__ import annotations
 import csv
 import io
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Optional
 
 import requests
@@ -70,6 +70,36 @@ def vix_history_closes(years: int = 10, sym: str = "VIX") -> list[float]:
     except Exception as exc:
         log.warning("cboe history failed: %s", exc)
         return []
+
+
+def history_rows(sym: str = "VIX", years: int = 2) -> list[tuple[str, float]]:
+    """(date_iso, close) rows of a Cboe index history file, chronological. [] on failure."""
+    try:
+        r = requests.get(HIST_URL.format(sym=sym), headers=HEADERS, timeout=20)
+        r.raise_for_status()
+        rows = list(csv.reader(io.StringIO(r.text)))
+        out: list[tuple[str, float]] = []
+        cutoff_year = datetime.now().year - years
+        for row in rows[1:]:
+            try:
+                d = datetime.strptime(row[0], "%m/%d/%Y")
+                if d.year >= cutoff_year:
+                    out.append((d.date().isoformat(), float(row[-1])))
+            except (ValueError, IndexError):
+                continue
+        return out
+    except Exception as exc:
+        log.warning("cboe history failed: %s", exc)
+        return []
+
+
+def closes_before(sym: str, day: date, n: int = 1) -> list[float]:
+    """Last n closes dated strictly before `day`: the previous-close convention of the regime model and of
+    the conformal scores. Safe after 16:00 ET, when the file may already contain today's close."""
+    rows = [c for d, c in history_rows(sym, years=2) if d < day.isoformat()]
+    if len(rows) < n:
+        raise ValueError(f"cboe history for {sym} has {len(rows)} rows before {day}")
+    return rows[-n:]
 
 
 def recent_closes(sym: str, n: int = 30) -> list[float]:

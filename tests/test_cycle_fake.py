@@ -154,6 +154,10 @@ def agent(tmp_path, monkeypatch):
     monkeypatch.setattr(main_mod.cboe, "fetch_term_structure",
                         lambda: {"vix": 16.3, "vix3m": 18.3, "vix1d": 10.8, "ts": FakeClock.now(timezone.utc), "source": "fake"})
     monkeypatch.setattr(main_mod.cboe, "vix1d_top_tercile_threshold", lambda n: 20.0)
+    monkeypatch.setattr(main_mod.cboe, "closes_before", lambda sym, day, n=1: [16.0] * n)
+    # a calibrated conformal state, so gate 31 has scores to read P from (see tests/test_conformal.py)
+    from tests.test_conformal import synthetic_state
+    synthetic_state().save(tmp_path / "conformal.json")
     import agent.execution.orders as orders_mod
     monkeypatch.setattr(orders_mod.time, "sleep", lambda s: None)
     monkeypatch.setattr(main_mod.time, "sleep", lambda s: None)

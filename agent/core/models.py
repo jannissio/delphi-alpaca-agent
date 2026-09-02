@@ -151,6 +151,7 @@ class CondorCandidate:
     net_vega: float
     created_ts: datetime
     rationale: str = ""
+    extras: dict = field(default_factory=dict)   # e.g. the conformal P-vs-Q ledger (gate 31)
 
     @property
     def max_loss_total(self) -> float:
@@ -197,6 +198,10 @@ class CondorCandidate:
             "net_gamma": round(self.net_gamma, 5),
             "net_theta": round(self.net_theta, 4),
             "net_vega": round(self.net_vega, 4),
+            "conformal": ({k: (round(v, 4) if isinstance(v, float) else v)
+                           for k, v in self.extras["conformal"].items()
+                           if k in ("k_conformal", "k_effective", "q_mid", "p_mid", "gap", "margin", "passes")}
+                          if "conformal" in self.extras else None),
         }
 
 

@@ -134,6 +134,7 @@ def test_gates_pass_on_clean_candidate(settings):
     ch = synthetic_chain()
     c = build_condor(ch, 650.0, "SPY", TODAY, settings.strategy, settings.underlying_cfg("SPY"), NOW)
     c.contracts = 2
+    c.extras["conformal"] = {"q_mid": 0.30, "p_mid": 0.10, "gap": 0.20, "margin": 0.05, "passes": True, "warnings": []}
     eng, res = _gate_run(settings, c)
     failed = [g for g in res if not g.passed]
     assert not failed, [(g.name, g.reason) for g in failed]

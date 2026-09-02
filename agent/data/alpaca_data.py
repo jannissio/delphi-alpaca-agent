@@ -7,7 +7,7 @@ Trading: account, positions, orders, clock. Order *submission* lives in agent.ex
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time as dtime, timedelta, timezone
 from typing import Optional
 
 from alpaca.data.enums import DataFeed, OptionsFeed
@@ -21,6 +21,7 @@ from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import GetOrdersRequest
 from alpaca.trading.enums import QueryOrderStatus
 
+from agent.core.clock import ET
 from agent.core.models import OptionQuote, Right, UnderlyingQuote
 
 log = logging.getLogger(__name__)
@@ -108,6 +109,30 @@ class AlpacaData:
         bars = self.stocks.get_stock_bars(req)
         data = bars.data.get(symbol, []) if hasattr(bars, "data") else bars[symbol]
         return [float(b.close) for b in data]
+
+    def intraday_bars(self, symbol: str, minutes: int, day: date) -> list[dict]:
+        """All `minutes`-bars of one session from IEX (timestamps are bar starts), with the ET start time."""
+        start = datetime.combine(day, dtime(9, 30), tzinfo=ET).astimezone(timezone.utc)
+        end = datetime.combine(day, dtime(16, 0), tzinfo=ET).astimezone(timezone.utc)
+        req = StockBarsRequest(symbol_or_symbols=symbol, timeframe=TimeFrame(minutes, TimeFrameUnit.Minute),
+                               start=start, end=end, limit=1000, feed=DataFeed.IEX)
+        bars = self.stocks.get_stock_bars(req)
+        data = bars.data.get(symbol, []) if hasattr(bars, "data") else bars[symbol]
+        return [{"ts": b.timestamp, "et": b.timestamp.astimezone(ET).strftime("%H:%M"), "open": float(b.open),
+                 "high": float(b.high), "low": float(b.low), "close": float(b.close)} for b in data]
+
+    def bar_close_at(self, symbol: str, day: date, hhmm_et: str, minutes: int = 30) -> float:
+        """Close of the bar that starts at hhmm_et (the 10:00 30-minute bar closes at 10:30, the anchor of
+        the historical scores); hhmm_et="last" gives the session's final bar close."""
+        bars = self.intraday_bars(symbol, minutes, day)
+        if not bars:
+            raise ValueError(f"no {minutes}-minute bars for {symbol} on {day}")
+        if hhmm_et == "last":
+            return bars[-1]["close"]
+        for b in bars:
+            if b["et"] == hhmm_et:
+                return b["close"]
+        raise ValueError(f"no {minutes}-minute bar starting {hhmm_et} ET for {symbol} on {day}")
 
     def chain(self, underlying: str, expiry: date, spot: float, width_pct: float = 0.03) -> list[OptionQuote]:
         """Both sides of the chain for one expiry within +-width_pct of spot, with Greeks."""

@@ -7,13 +7,13 @@ Generated 2026-09-02T08:01:07 UTC from `state/history/daily.csv`. Assumptions: s
 | horizon | n | inside rate | mean P&L % | median P&L % | mean $/contract | P05 $/contract | loss share | worst % |
 |---|---|---|---|---|---|---|---|---|
 | 10:30->close 2024-2026 | 668 | 0.802 | 0.0323 | 0.085 | 24.61 | -314.87 | 0.151 | -0.415 |
-| open->close 2018-2026 | 1533 | 0.676 | -0.0119 | 0.085 | -9.05 | -316.23 | 0.275 | -0.415 |
+| open->close 2020-07 to 2026 | 1533 | 0.676 | -0.0119 | 0.085 | -9.05 | -316.23 | 0.275 | -0.415 |
 | close->close 1990-2026 (1.10x, overnight incl.) | 4263 | 0.766 | 0.0086 | 0.085 | 6.57 | -316.23 | 0.203 | -0.415 |
 
 By year (mean P&L % per session), 10:30->close: 2024: 0.0251, 2025: 0.0287, 2026: 0.0486
 By year, open->close: 2020: 0.0269, 2021: 0.0224, 2022: -0.0892, 2023: -0.0341, 2024: 0.0074, 2025: -0.0023, 2026: 0.0165
 
-## By regime (open->close, 2018-2026)
+## By regime (open->close, 2020-2026)
 
 | VIX/VIX3M slope | n | mean P&L % | inside rate |
 |---|---|---|---|
@@ -33,7 +33,7 @@ By year, open->close: 2020: 0.0269, 2021: 0.0224, 2022: -0.0892, 2023: -0.0341, 
 | dataset | OOS years | n OOS | base rate | logit Brier (base) | logit AUC | GBM Brier | GBM AUC |
 |---|---|---|---|---|---|---|---|
 | A_1030_close | 2025-2026 | 416 | 0.7778 | 0.15332 (0.15088) | 0.5618 | 0.15058 | 0.6044 |
-| B_open_close | 2021-2026 | 1170 | 0.8108 | 0.23112 (0.25416) | 0.5575 | 0.23497 | 0.5515 |
+| B_open_close | 2022-2026 | 1170 | 0.8108 | 0.23112 (0.25416) | 0.5575 | 0.23497 | 0.5515 |
 | C_close_close | 2012-2026 | 3687 | 0.7622 | 0.17244 (0.17872) | 0.6257 | 0.17503 | 0.6057 |
 
 ## Predicted-probability terciles (out of sample) vs realised
@@ -72,3 +72,26 @@ By year, open->close: 2020: 0.0269, 2021: 0.0224, 2022: -0.0892, 2023: -0.0341, 
 `config/regime_model.json`: B_open_close, logistic regression on vix_prev, slope_prev, rv5_over_vix, rv20_over_vix, gap, absret_prev, is_first_friday, is_third_friday, dow_0, dow_1, dow_2, dow_3; thresholds p_half 0.588, p_zero 0.467; taper enabled: True. Coefficients (standardised): vix_prev -0.095, slope_prev -0.395, rv5_over_vix -0.073, rv20_over_vix +0.012, gap +0.280, absret_prev +0.204, is_first_friday -0.017, is_third_friday +0.079, dow_0 +0.103, dow_1 +0.111, dow_2 +0.053, dow_3 -0.037.
 
 Reading guide: the model is used only to shrink size. If the low-probability tercile has no worse P&L than the others out of sample, the taper is disabled and the report says so. No Sharpe ratios are computed: with 2.5 sessions the Probabilistic Sharpe Ratio cannot reach 95 % (research/F2).
+
+## Corrections and limitations (added 2026-09-02 after research/G and research/H)
+
+1. **Labels corrected.** The open-to-close series begins **2020-07-27**, not 2018 (the IEX daily bars before that date
+   have no usable opens), and its first out-of-sample test year is **2022**: the 2021 fold is skipped because it would
+   train on fewer than 200 rows. The tables above now say so. Nothing numerical changed.
+2. **The deployed logit is worse than a constant on the live horizon.** On A_1030_close the logit's Brier score
+   (0.15332) is *above* the base-rate Brier (0.15088), calibration slope 0.14, tercile P&L spread t = 1.27. The taper it
+   drives is therefore not statistically supported on the horizon we actually trade; it is supported on C_close_close
+   (15 independent year-blocks, logit the best single model). The model stays because it can only shrink size, and the
+   write-up says exactly this (research/H section 4).
+3. **Model comparison, disclosed in full.** Seven model families x three horizons = 21 configurations (plus the two live
+   configurations from research/F2) were evaluated under one expanding-window protocol: logistic regression, XGBoost,
+   LightGBM, a logit+XGBoost average, TabPFN v2, TabICL v2 and a constant. Tabular foundation models win only on horizon
+   A (two year-blocks, no inference possible) and lose with intervals excluding zero on horizon C. The only
+   direction-stable improvement is the logit+XGBoost average, whose edge on C is -0.0005 Brier with a bootstrap interval
+   spanning zero. Decision: keep the logit; report the negative result (research/H, `research/experiments/model_comparison.py`).
+4. **The constant-credit assumption limits what this back-test can say.** The credit is held at 17 % of the wing for
+   every geometry. Once the credit is made consistent with the interval width (a wider interval sells for less), the
+   apparent gain from widening the interval disappears (research/G sections 5.1-5.2). Rows that compare different
+   short distances or widths are therefore illustration, not evidence; rows that compare regimes at a fixed geometry
+   stand. The live agent does not use a modelled credit at all: it reads the market's price off the quote
+   (`agent/core/conformal.py`, gate 31).

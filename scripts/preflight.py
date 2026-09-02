@@ -15,6 +15,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from agent.core import conformal as conf_mod  # noqa: E402
 from agent.core.bs import enrich_greeks  # noqa: E402
 from agent.core.clock import ET, at_et, market_minutes_remaining, now_et  # noqa: E402
 from agent.core.config import ROOT, Settings  # noqa: E402
@@ -60,13 +61,51 @@ def main() -> None:
         print(f"== ATM IV today {iv0} / next {iv1} -> sigma_event {ev}")
     except Exception as exc:
         print("== event vol n/a:", str(exc)[:120])
+    # Conformal Condor: today's interval (not committed to disk: the agent does that at its first evaluation)
+    cp = conf_mod.ConformalParams.from_config(s.strategy.get("conformal"))
+    sess, st = None, None
+    if cp.enabled:
+        try:
+            st = conf_mod.ConformalState.load(ROOT / "state" / "conformal.json")
+            if st.session and st.session.get("date") == today.isoformat():
+                sess = st.session
+                print("== conformal interval committed earlier today:", json.dumps(sess))
+            else:
+                vix_prev = cboe.closes_before("VIX", today, 1)[-1]
+                sess = conf_mod.open_session(st, cp, today, now, spot, vix_prev)
+            print(f"== conformal interval: alpha_t {sess['alpha_t']:.4f}, n {sess['n']}, k {sess['k']:.3f} "
+                  f"(raw {sess['k_raw']:.3f}, clipped {sess['clipped']}), VIX prev {sess['vix_prev']}, implied ref move "
+                  f"{sess['impl_ref_usd']:.2f} $ ({sess['impl_ref_pct']:.3f} %) -> short distance {sess['k'] * sess['impl_ref_usd']:.2f} $; "
+                  f"state through {st.updated_through}")
+        except Exception as exc:
+            print("== CONFORMAL STATE UNAVAILABLE (the agent would log NO_TRADE):", str(exc)[:200])
+    short_distance = sess["k"] * sess["impl_ref_usd"] if sess else None
     try:
-        cand = build_condor(chain, spot, "SPY", today, s.strategy, s.underlying_cfg("SPY"), now)
+        cand = build_condor(chain, spot, "SPY", today, s.strategy, s.underlying_cfg("SPY"), now, short_distance=short_distance)
     except StrategyError as exc:
         print("== NO CANDIDATE:", exc)
         return
     print("== candidate", json.dumps(cand.summary(), indent=1))
     print("   ", cand.rationale)
+    if sess is not None:
+        led = conf_mod.ledger_for_candidate(cand, st, cp, sess)
+        cand.extras["conformal"] = led
+        k = led["kelly"]
+        print(f"== P vs Q: Q_mid {led['q_mid']:.3f} (call {led['q_call']:.3f}, put {led['q_put']:.3f}) vs P_mid {led['p_mid']:.3f}; "
+              f"gap {led['gap']:+.3f} vs margin {led['margin']} -> {'TRADE' if led['passes'] else 'NO_TRADE'}")
+        print(f"   P_short {led['p_short']:.3f} (alpha_t {led['alpha_t']:.3f}, k_eff {led['k_effective']:.3f}), strict gap {led['strict_gap']:+.3f}; "
+              f"EV digital {led['ev_digital_usd_per_package']:+.1f} $/package, EV hist {led['ev_hist_usd_per_package']}; "
+              f"break-even p_inside {led['break_even_p_inside']}; deltas {led['delta_short_call']}/{led['delta_short_put']}")
+        print(f"   Kelly exhibit: b {k['b']:.3f}, f* two-state {k['f_two_state']:+.3f}, three-state {k['f_three_state']:+.3f}, "
+              f"shrunk {k['f_shrunk']:.3f}, used {k['f_used']:.3f} ({k['binding_constraint']}); warnings {led['warnings']}")
+        try:
+            fixed = build_condor(chain, spot, "SPY", today, s.strategy, s.underlying_cfg("SPY"), now)
+            fl = conf_mod.ledger_for_candidate(fixed, st, cp, sess)
+            fs = fixed.summary()
+            print(f"== counterfactual fixed rule: shorts {fs['short_put']}/{fs['short_call']} credit {fs['credit_mid']} "
+                  f"Q_mid {fl['q_mid']:.3f} P_mid {fl['p_mid']:.3f} gap {fl['gap']:+.3f} -> {'TRADE' if fl['passes'] else 'NO_TRADE'}")
+        except StrategyError as exc:
+            print("== counterfactual fixed rule: no candidate:", str(exc)[:160])
     iv_ann = straddle_implied_vol_annualized(cand.implied_move, spot, mins)
     print(f"== straddle-implied vol {iv_ann:.3f} vs realised {rv}; ratio {(iv_ann / rv) if (iv_ann and rv) else None}")
     mult = regime_multiplier(ts["vix"] / ts["vix3m"], 0.95, 1.0) if ts else 0.0
