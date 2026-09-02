@@ -49,7 +49,10 @@ def main() -> None:
         if r.returncode == 0:
             print("nothing to publish")
             return
-        subprocess.run(["git", "commit", "-q", "-m", "Publish ledger and dashboard"], cwd=ROOT, check=True)
+        ident = subprocess.run(["git", "log", "-1", "--format=%an%n%ae"], cwd=ROOT, capture_output=True, text=True).stdout.split("
+")
+        name, email = (ident[0] if ident and ident[0] else "Jannis"), (ident[1] if len(ident) > 1 and ident[1] else "siojannis@gmail.com")
+        subprocess.run(["git", "-c", f"user.name={name}", "-c", f"user.email={email}", "commit", "-q", "-m", "Publish ledger and dashboard"], cwd=ROOT, check=True)
         subprocess.run(["git", "push", "-q", "origin", "main"], cwd=ROOT, check=True)
         print("pushed")
 
