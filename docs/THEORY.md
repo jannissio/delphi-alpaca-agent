@@ -128,10 +128,15 @@ formal reason the 2 % session cap binds and Kelly is logged only as an exhibit. 
   before the close is not covered by the bound. We log the exit reason for every position.
 * Paper-simulator fills, strike rounding, and the one-day-VIX-to-intraday scaling are approximations stated in
   `research/G` and `docs/regime_model_report.md`.
-* Machine-checked (Lean 4 + Mathlib, see `lean/README.md` for the exact status): Lemma 1's bounds and monotonicity, and
-  the finite-average form of the Corollary of Theorem 3 (if the average payout ratio is at most `beta` and
-  `c >= (beta + mu) w`, the average payoff is at least `mu w`). The probabilistic step of Theorem 3 is cited, not
-  formalised.
+* **Machine-checked** in Lean 4 (v4.34.0-rc2) with Mathlib, `lean/Delphi/Condor.lean`, 13 theorems, no `sorry`, only the
+  three standard axioms (`propext`, `Classical.choice`, `Quot.sound`; audited with `lake env lean CheckAxioms.lean`):
+  Lemma 1 in full (`loss_nonneg`, `loss_le_one`, `loss_mem_Icc`, `loss_antitone`, `loss_eq_zero_of_le`,
+  `loss_eq_one_of_ge`); the payoff identity and its monotonicity in the radius (`payoff_eq`, `payoffOfLoss_affine`,
+  `payoffOfLoss_antitone`, `payoff_monotone`); the finite-average form of the Corollary of Theorem 3
+  (`avg_payoff_ge`, `avg_condor_payoff_ge`: if the average payout ratio over a finite calibration set is at most
+  `beta` and `c >= (beta + mu) w`, the average payoff is at least `mu w`); and the discrete layer-cake identity behind
+  Lemma 2 (`sum_eq_sum_card_filter`). The probabilistic step of Theorem 3 (exchangeability to expectation) and Theorem 4
+  are cited and proved on paper above, not formalised. Rebuild: `lean/README.md`.
 
 ## 7. Pre-registration
 
