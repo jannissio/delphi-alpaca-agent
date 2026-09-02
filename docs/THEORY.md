@@ -78,7 +78,9 @@ from Lemma 1 (`X = w * loss`, monotone in the distance) and linearity. QED.
 *Remarks.* (i) The expectation is marginal over the calibration draw and the new session, not conditional on the
 calibration set; this is the same sense in which split conformal prediction guarantees coverage. (ii) `beta` must be
 fixed before the data are seen; the agent uses the pre-registered `beta* = 0.10`. (iii) If a delta-band adjustment
-moves a short strike inside `k_hat * m`, the certificate is void; the agent logs this and gate 31 rejects.
+moves a short strike inside `k_hat * m`, the certificate is void; the agent logs this and gate 31 rejects. Because
+`k_hat` depends on `omega = w / m`, a wing narrowed after the interval was committed gets its radius re-derived at
+the traded wing, and the larger of the two radii binds; a radius clip that binds voids the certificate as well.
 (iv) The coverage version of research/G is the special case `loss = 1{r > k}` (the limit `omega -> 0`); since
 `min((r-k)^+, omega)/omega <= 1{r > k}` pointwise, the risk radius at level `beta` is never wider than the coverage
 radius at level `alpha = beta`.

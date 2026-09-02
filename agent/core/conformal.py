@@ -381,11 +381,21 @@ def ledger_for_candidate(cand: CondorCandidate, st: ConformalState, p: Conformal
     # beyond the radius certified at beta* (rounding outward keeps it; a delta-band shift inward would break it)
     risk_hat = crc_risk(scores, k_eff, omega)
     beta_empirical = crc_certified(scores, k_eff, omega)
-    k_cert = float(session.get("k_crc_fixed", session["k_crc"]))
-    certified_ok = k_eff >= min(k_cert, p.k_max) - 1e-9
+    # The session committed omega for the default wing; the strategy may have narrowed the wing (smaller omega,
+    # larger payout per breach), so the radius certified at beta* is re-derived for the wing actually traded and
+    # the stricter of the two is binding. A k_max clip that binds means the certificate is void, not clipped.
+    beta_star = float(session.get("beta_star", p.beta_target))
+    k_cert_session = float(session.get("k_crc_fixed", session["k_crc"]))
+    try:
+        k_cert_wing = crc_radius(scores, omega, beta_star)
+    except ValueError:
+        k_cert_wing = float("inf")
+    k_cert = max(k_cert_session, k_cert_wing)
+    certified_ok = k_eff >= k_cert - 1e-9
     if not certified_ok:
-        warnings.append(f"short strike inside the certified radius: k_eff {k_eff:.3f} < k_crc_fixed {k_cert:.3f}")
-    beta_certified = float(session.get("beta_star", p.beta_target)) if certified_ok else None
+        warnings.append(f"short strike inside the certified radius: k_eff {k_eff:.3f} < k_crc_fixed {k_cert:.3f}"
+                        f" (session {k_cert_session:.3f}, at this wing {k_cert_wing:.3f})")
+    beta_certified = beta_star if certified_ok else None
     gap_crc = (q_mid - beta_certified) if beta_certified is not None else float("-inf")
     gap_empirical = q_mid - beta_empirical
     gap_cov = q_mid - p_mid
@@ -408,7 +418,8 @@ def ledger_for_candidate(cand: CondorCandidate, st: ConformalState, p: Conformal
         "p_short": p_short, "p_mid": p_mid, "q_mid": q_mid, "q_call": q_call, "q_put": q_put,
         "delta_short_call": cand.short_call.quote.delta, "delta_short_put": cand.short_put.quote.delta,
         "risk_hat": risk_hat, "beta_empirical": beta_empirical, "beta_certified": beta_certified,
-        "k_crc_fixed": k_cert, "certified_ok": certified_ok,
+        "k_crc_fixed": k_cert, "k_crc_fixed_session": k_cert_session, "k_crc_fixed_at_wing": k_cert_wing,
+        "certified_ok": certified_ok,
         "gap_crc": gap_crc, "gap_empirical": gap_empirical, "gap_cov": gap_cov, "gap": gate_gap, "strict_gap": strict_gap,
         "margin": p.margin, "passes": gate_gap >= p.margin - 1e-12,
         "ev_lower_bound_usd_per_package": (100.0 * ratio * (credit_1 - beta_certified * w)) if beta_certified is not None else None,

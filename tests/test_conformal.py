@@ -148,6 +148,15 @@ def test_ledger_reads_q_off_the_quote_and_certifies_p(settings):
     led_in = conf.ledger_for_candidate(cand, st, p, {**sess, "k_crc_fixed": led["k_effective"] + 0.5})
     assert not led_in["certified_ok"] and led_in["beta_certified"] is None and not led_in["passes"]
     assert any("inside the certified radius" in w for w in led_in["warnings"])
+    # a session committed with a wider wing (smaller loss per breach) does not certify a narrower package:
+    # the radius is re-derived at the traded wing and is the binding one
+    sess_wide = conf.open_session(synthetic_state(), p, TODAY, NOW, 650.0, 16.0, wing_usd=4.0 * 3)
+    assert sess_wide["k_crc_fixed"] < sess["k_crc_fixed"]
+    led_w = conf.ledger_for_candidate(cand, st, p, sess_wide)
+    assert led_w["k_crc_fixed_session"] == pytest.approx(sess_wide["k_crc_fixed"])
+    assert led_w["k_crc_fixed_at_wing"] == pytest.approx(sess["k_crc_fixed"], abs=1e-4)
+    assert led_w["k_crc_fixed"] == pytest.approx(led_w["k_crc_fixed_at_wing"], abs=1e-4)
+    assert led_w["certified_ok"] == (led_w["k_effective"] >= led_w["k_crc_fixed"] - 1e-9)
     assert led["kelly"]["f_used"] <= 0.02 and led["kelly"]["binding_constraint"] in {"cap", "kelly"}
     assert cand.summary()["conformal"] is None
     cand.extras["conformal"] = led

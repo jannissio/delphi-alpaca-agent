@@ -513,7 +513,9 @@ class Agent:
             cand = build_condor(chain, spot, underlying, today, self.s.strategy, self.s.underlying_cfg(underlying), now,
                                 short_distance=short_distance)
         except StrategyError as exc:
-            self.audit.write("no_trade", reason=f"strategy: {exc}")
+            ctx = ({"k": sess["k"], "beta_star": sess.get("beta_star"), "beta_t": sess.get("beta_t"),
+                    "short_distance_usd": round(short_distance, 2), "omega": sess.get("omega")} if sess else None)
+            self.audit.write("no_trade", reason=f"strategy: {exc}", conformal=ctx)
             return
         if sess is not None:
             self._conformal_ledger(cand, chain, spot, underlying, today, now, sess)
