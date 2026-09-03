@@ -1,5 +1,5 @@
 # Working files for the deck and the video. Deliberately outside the
-# submission: what ships is Delphi_deck.pdf and Delphi_deck.pptx.
+# submission: what ships is Delphi_deck.pdf only; every .pptx stays local.
 build_deck.py
 merge_audio.ps1
 README.md
@@ -8,3 +8,4 @@ Delphi_deck_guides.pptx
 Delphi_deck_recorded.pptx
 Delphi_deck_with_audio.pptx
 *.ps1
+Delphi_deck.pptx
