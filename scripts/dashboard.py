@@ -35,7 +35,43 @@ def table(rows: list[list], header: list[str]) -> str:
     return f"<table><thead><tr>{h}</tr></thead><tbody>{b}</tbody></table>"
 
 
-def build(recs: list[dict], journal: list[dict]) -> str:
+def pilot_section(archive: Path) -> str:
+    """Compact, clearly labelled summary of an archived development run (never mixed into the competition figures)."""
+    recs = load_jsonl(archive / "audit.jsonl")
+    if not recs:
+        return ""
+    name = archive.name.replace("pilot_", "")
+    account = name.split("_")[0]
+    sessions = sorted({r.get("session") for r in recs if r.get("session")})
+    opened = [r for r in recs if r["kind"] == "position_opened"]
+    closed = [r for r in recs if r["kind"] == "position_closed"]
+    gates = [r for r in recs if r["kind"] == "gates"]
+    halts = [r for r in recs if r["kind"] == "halt"]
+    pnl = sum(r.get("pnl", 0.0) for r in closed)
+    out = [f"<h2>Development pilot (not the competition account): {esc(account)}, {esc(', '.join(sessions))}</h2>",
+           "<div class='muted'>One-contract pilot under the fixed 1.10x strike rule, before the conformal rule, the re-quoting ladder and the "
+           "gate at the expected fill went live. Its lessons are in docs/CONFIG_CHANGES.md; its full report is docs/report_" + esc(sessions[0] if sessions else "") + ".md. "
+           "Nothing from this run is counted above.</div>",
+           f"<div class='grid'><div class='tile'><span class='muted'>gate evaluations</span><b>{len(gates)}</b></div>"
+           f"<div class='tile'><span class='muted'>positions opened / closed</span><b>{len(opened)} / {len(closed)}</b></div>"
+           f"<div class='tile'><span class='muted'>realised P&amp;L</span><b>{pnl:+.2f} USD</b></div>"
+           f"<div class='tile'><span class='muted'>halts</span><b>{len(halts)}</b></div></div>"]
+    rows = []
+    for r in opened:
+        p = r["position"]
+        rows.append([p["opened_ts"][:16], p["contracts"], f"{p['entry_credit']:.2f}", f"{p['max_loss_total']:.0f}", r.get("fill_rung"),
+                     ", ".join(f"{l['side'][0].upper()}{l['strike']:.0f}{l['right'][0].upper()}" for l in p["legs"])])
+    if rows:
+        out.append(table(rows, ["opened (UTC)", "qty", "credit", "max loss $", "fill rung", "legs"]))
+    rows = [[r["ts"][:16], r["reason"], f"{r['entry_credit']:.2f}", f"{r['exit_debit']:.2f}", f"{r['pnl']:+.2f}"] for r in closed]
+    if rows:
+        out.append(table(rows, ["closed (UTC)", "reason", "entry", "exit", "P&L $"]))
+    if halts:
+        out.append("".join(f"<p class='no'>{esc(h['ts'][:16])}: {esc(h['reason'][:160])}</p>" for h in halts))
+    return "".join(out)
+
+
+def build(recs: list[dict], journal: list[dict], account_id: str = "", pilots: list[Path] = ()) -> str:
     sessions = sorted({r.get("session") for r in recs if r.get("session")})
     marks = [r for r in recs if r["kind"] == "mark"]
     opened = [r for r in recs if r["kind"] == "position_opened"]
@@ -93,6 +129,7 @@ th{{color:var(--muted);font-weight:600}} .ok{{color:var(--ok)}} .no{{color:var(-
 .wrap{{overflow-x:auto}} pre{{white-space:pre-wrap;font-size:13px}}
 </style></head><body><main>
 <h1>Delphi: 0DTE iron condor agent on Alpaca paper</h1>
+<div class="muted">Competition paper account <b>{esc(account_id or 'n/a')}</b>: brand-new, dedicated, $100,000 starting balance, options level 3; only the submitted agent has ever traded on it (from 2026-09-03). The 2026-09-02 pilot ran on a separate development account and is shown at the bottom, labelled.</div>
 <div class="claim">We do not claim a statistically detectable edge. We claim a risk process that behaved exactly as specified.</div>
 <div class="muted">sessions: {esc(', '.join(sessions) or 'none yet')} | audit records: {len(recs)} | generated from state/audit.jsonl</div>
 <div class="grid">
@@ -195,6 +232,8 @@ th{{color:var(--muted);font-weight:600}} .ok{{color:var(--ok)}} .no{{color:var(-
     parts.append("<h2>Configuration changes since the first live cycle</h2><div class='muted'>Every pre-registered parameter changed after 2026-09-02 10:00 ET, with date, "
                  "evidence and effect: <a href='https://github.com/jannissio/delphi-alpaca-agent/blob/main/docs/CONFIG_CHANGES.md'>docs/CONFIG_CHANGES.md</a>. "
                  "Each audit record carries the config hash that produced it.</div>")
+    for archive in pilots:
+        parts.append(pilot_section(archive))
     parts.append("<h2>Journal (last entries)</h2>")
     for j in journal[-8:]:
         parts.append(f"<p><span class='muted'>{esc(j['ts'][:16])} [{esc(j['tier'])}]</span> {esc(j['entry'])}"
@@ -211,8 +250,13 @@ def main() -> None:
     out = Path(sys.argv[sys.argv.index("--out") + 1]) if "--out" in sys.argv else Path("docs/dashboard.html")
     recs = load_jsonl(STATE_DIR / "audit.jsonl")
     journal = load_jsonl(STATE_DIR / "journal.jsonl")
+    import os
+    from dotenv import load_dotenv
+    load_dotenv(ROOT / ".env")
+    account_id = os.environ.get("ALPACA_ACCOUNT_ID", "").strip()
+    pilots = sorted(p for p in STATE_DIR.glob("pilot_*") if p.is_dir())
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(build(recs, journal), encoding="utf-8")
+    out.write_text(build(recs, journal, account_id=account_id, pilots=pilots), encoding="utf-8")
     print("wrote", out, f"({out.stat().st_size} bytes)")
 
 
