@@ -26,7 +26,10 @@ def load(session: str | None) -> list[dict]:
     if not p.exists():
         return []
     recs = [json.loads(l) for l in p.read_text(encoding="utf-8").splitlines() if l.strip()]
-    return [r for r in recs if session is None or r.get("session") == session]
+    def belongs(r: dict) -> bool:   # conformal_interval records carry the session dict under "session"; match on its date
+        s = r.get("session")
+        return session is None or s == session or (isinstance(s, dict) and s.get("date") == session)
+    return [r for r in recs if belongs(r)]
 
 
 def build(recs: list[dict], session: str | None) -> tuple[str, dict]:
@@ -94,8 +97,9 @@ def build(recs: list[dict], session: str | None) -> tuple[str, dict]:
                   f"- last reading: sigma_event = {ev.get('sigma_event')} between {ev.get('expiry_short')} and {ev.get('expiry_long')} (IV {ev.get('iv_short')} vs {ev.get('iv_long')})"]
     if conf_iv or conf_led or conf_eod or conf_err:
         lines += ["", "## Conformal Condor: P-versus-Q ledger (gate 31)",
-                  "Q_mid = credit / wing read off the quote (risk-neutral probability of finishing beyond the spread midpoint); "
-                  "P_mid = conformal p-value of the same distance in the trailing calibration scores. Trade iff Q_mid - P_mid >= margin."]
+                  "Q = credit / wing at the expected fill (the market's price of the band); P = the empirical payout ratio at the candidate's "
+                  "strikes, shown for the reader. Rule crc: trade iff Q - beta* >= margin with the short strikes at or beyond the certified radius; "
+                  "rule fixed (pilot): Q_mid - P_mid >= margin."]
         for r in conf_iv:
             s = r["session"]
             lines.append(f"- interval committed {r['ts'][:19]} ({s.get('rule')}): beta_t {s.get('beta_t', 0):.4f} -> k_crc {s.get('k_crc', 0):.3f}, "

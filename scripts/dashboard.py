@@ -102,30 +102,56 @@ def pilot_section(archive: Path) -> str:
         return ""
     name = archive.name.replace("pilot_", "")
     account = name.split("_")[0]
-    sessions = sorted({r.get("session") for r in recs if r.get("session")})
+    sessions = sorted({r.get("session") for r in recs if isinstance(r.get("session"), str)})  # conformal_interval carries a session dict
     opened = [r for r in recs if r["kind"] == "position_opened"]
     closed = [r for r in recs if r["kind"] == "position_closed"]
     gates = [r for r in recs if r["kind"] == "gates"]
     halts = [r for r in recs if r["kind"] == "halt"]
     pnl = sum(r.get("pnl", 0.0) for r in closed)
-    out = [f"<h2>Development pilot (not the competition account): {esc(account)}, {esc(', '.join(sessions))}</h2>",
-           "<div class='muted'>One-contract pilot under the fixed 1.10x strike rule, before the conformal rule, the re-quoting ladder and the "
-           "gate at the expected fill went live. Its lessons are in docs/CONFIG_CHANGES.md; its full report is docs/report_" + esc(sessions[0] if sessions else "") + ".md. "
-           "Nothing from this run is counted above.</div>",
+    first = sessions[0] if sessions else ""
+    out = [f"<h2>What a trade looks like: development pilot {esc(', '.join(sessions))} on account {esc(account)} (not the competition account, not counted above)</h2>",
+           "<div class='muted'>One-contract pilot on a separate development account, under the fixed 1.10x strike rule, before the conformal rule, the re-quoting ladder and the "
+           "gate at the expected fill went live. It is shown because it exercised the whole path once: regime vote, gates, critic, ladder, fill, exit. "
+           "Its lessons are in docs/CONFIG_CHANGES.md; its full report is docs/report_" + esc(first) + ".md. Under the rule that now runs, this day would not have traded either: "
+           "the fill was 0.147 of the wing, the gate needs 0.15.</div>",
            "<div class='grid'>" + tile("gate evaluations", len(gates)) + tile("positions opened / closed", f"{len(opened)} / {len(closed)}")
            + tile("realised P&L", f"{pnl:+.2f} USD") + tile("halts", len(halts)) + "</div>"]
-    rows = []
-    for r in opened:
-        p = r["position"]
-        rows.append([p["opened_ts"][:16], p["contracts"], f"{p['entry_credit']:.2f}", f"{p['max_loss_total']:.0f}", r.get("fill_rung"),
-                     ", ".join(f"{l['side'][0].upper()}{l['strike']:.0f}{l['right'][0].upper()}" for l in p["legs"])])
-    if rows:
-        out.append(table(rows, ["opened (UTC)", "qty", "credit", "max loss $", "fill rung", "legs"]))
-    rows = [[r["ts"][:16], r["reason"], f"{r['entry_credit']:.2f}", f"{r['exit_debit']:.2f}", f"{r['pnl']:+.2f}"] for r in closed]
-    if rows:
-        out.append(table(rows, ["closed (UTC)", "reason", "entry", "exit", "P&L $"]))
-    if halts:
-        out.append("".join(f"<p class='no'>{esc(h['ts'][:16])}: {esc(h['reason'][:160])}</p>" for h in halts))
+    pic = ROOT / "docs" / f"band_price_{first}_pilot.svg"
+    if pic.exists():
+        out.append("<div class='wrap'>" + pic.read_text(encoding="utf-8") + "</div>")
+    # the anatomy: one row per step of the path, straight from the audit log
+    steps = []
+    for r in recs:
+        k, t = r["kind"], r["ts"][11:19]
+        if k == "llm_regime":
+            d, m = r.get("decision") or {}, r.get("meta") or {}
+            steps.append([t, "regime vote", f"{m.get('votes', '?')} calls, unanimous {m.get('unanimous')}: {d.get('vol_regime')} / {d.get('trend')} / {d.get('event_risk')} → {d.get('strategy_family')}, veto {d.get('veto')}"])
+        elif k == "gates":
+            c, res = r.get("candidate") or {}, r.get("results") or []
+            steps.append([t, "gates", f"{sum(1 for x in res if x['passed'])} of {len(res)} passed; condor {c.get('long_put', 0):.0f}/{c.get('short_put', 0):.0f}/{c.get('short_call', 0):.0f}/{c.get('long_call', 0):.0f}, "
+                                      f"credit mid {c.get('credit_mid', 0):.2f}, natural {c.get('credit_natural', 0):.2f}, max loss {c.get('max_loss_total', 0):.0f} $"])
+        elif k == "llm_critic":
+            d = r.get("decision") or {}
+            steps.append([t, "critic", f"{d.get('verdict')}: {(d.get('reason') or '')[:110]}"])
+        elif k == "order_submitted":
+            steps.append([t, "ladder rung " + str(r.get("step")), f"{r.get('tag')}: limit {r.get('price')} (signed {r.get('signed_limit')}), qty {r.get('qty')}"])
+        elif k == "open_not_filled":
+            res = r.get("result") or {}
+            steps.append([t, "ladder exhausted", f"unfilled after {len(res.get('order_ids', []))} rungs, last price {res.get('last_price')}; the natural credit fell faster than the ladder (fixed: every rung is re-quoted now)"])
+        elif k == "order_filled":
+            steps.append([t, "filled", f"{r.get('tag')}: rung {r.get('step')} at {r.get('avg_price')}"])
+        elif k == "position_opened":
+            p = r["position"]
+            steps.append([t, "position opened", f"{p['contracts']} contract(s), credit {p['entry_credit']:.2f}, max loss {p['max_loss_total']:.0f} $, " +
+                          ", ".join(f"{l['side'][0].upper()}{l['strike']:.0f}{l['right'][0].upper()}" for l in p["legs"])])
+        elif k == "halt":
+            steps.append([t, "halt", (r.get("reason") or "")[:120] + " (a false mismatch: side strings compared case-sensitively; new risk stopped as designed; fixed in cb441a8)"])
+        elif k == "flatten_start":
+            steps.append([t, "exit", f"{r.get('reason')}: close mid {r.get('close_mid')}, natural {r.get('close_natural')}, ladder {r.get('ladder')}"])
+        elif k == "position_closed":
+            steps.append([t, "position closed", f"{r.get('reason')}: entry {r['entry_credit']:.2f}, exit {r['exit_debit']:.2f}, P&L {r['pnl']:+.2f} $"])
+    if steps:
+        out.append("<h3 class='muted'>Anatomy of the trade, from the audit log</h3>" + table(steps, ["UTC", "step", "record"]))
     return "".join(out)
 
 
@@ -188,7 +214,7 @@ def certificate_section(conf_iv: list[dict], conf_eod: list[dict]) -> str:
 
 
 def build(recs: list[dict], journal: list[dict], account_id: str = "", pilots: list[Path] = ()) -> str:
-    sessions = sorted({r.get("session") for r in recs if r.get("session")})
+    sessions = sorted({r.get("session") for r in recs if isinstance(r.get("session"), str)})  # conformal_interval carries a session dict
     marks = [r for r in recs if r["kind"] == "mark"]
     opened = [r for r in recs if r["kind"] == "position_opened"]
     closed = [r for r in recs if r["kind"] == "position_closed"]
@@ -280,6 +306,15 @@ def build(recs: list[dict], journal: list[dict], account_id: str = "", pilots: l
         parts.append("<div class='muted'>Interval committed; no candidate strike pair has reached gate 31 yet.</div>")
     else:
         parts.append("<div class='muted'>No candidate evaluated under the conformal rule yet on this account. The first rows appear in the first entry window (10:15 ET).</div>")
+    for s in sessions:
+        pic = ROOT / "docs" / f"band_price_{s}.svg"
+        if pic.exists():
+            parts.append("<div class='wrap'>" + pic.read_text(encoding="utf-8") + "</div>")
+            parts.append(f"<div class='muted'>Session {esc(s)}: every evaluation cycle the strategy prices the balanced condor at the configured wing; the red points are what the "
+                         "market offered as a fraction of the wing, the black line is the gate. Regenerate: python scripts/band_price.py --session " + esc(s) + ".</div>")
+
+    for archive in pilots:
+        parts.append(pilot_section(archive))
 
     # ---- decisions
     parts.append("<h2>Decisions</h2><div class='grid'>")
@@ -363,8 +398,6 @@ def build(recs: list[dict], journal: list[dict], account_id: str = "", pilots: l
     parts.append("<h2>Configuration changes since the first live cycle</h2><div class='muted'>Every pre-registered parameter changed after 2026-09-02 10:00 ET, with date, "
                  "evidence and effect: <a href='https://github.com/jannissio/delphi-alpaca-agent/blob/main/docs/CONFIG_CHANGES.md'>docs/CONFIG_CHANGES.md</a>. "
                  "Each audit record carries the config hash that produced it.</div>")
-    for archive in pilots:
-        parts.append(pilot_section(archive))
     parts.append("<h2>Journal (last entries)</h2>")
     if not journal:
         parts.append("<div class='muted'>no journal entries yet</div>")
