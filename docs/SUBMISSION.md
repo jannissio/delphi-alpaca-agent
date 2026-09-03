@@ -48,7 +48,10 @@ bound, a risk process that behaved exactly as specified, and a ledger anyone can
 
 **Alpaca infrastructure:** Trading API via alpaca-py (chains, mleg orders, positions, IEX bars for the calibration
 scores); Alpaca CLI as the independent monitoring and reconciliation path; Alpaca MCP server for operator inspection.
-Paper trading enforced at start-up. Paper account ID: PA314NYH4H7G.
+Paper trading enforced at start-up. Competition paper account ID: **PA31SEVJV9P9** (brand-new, dedicated, $100,000
+starting balance, options level 3; only the submitted agent has ever traded on it, from 2026-09-03). The pilot day
+2026-09-02 (fixed 1.10x rule, one contract, +$14) ran on a separate development account, PA314NYH4H7G, and is
+reported as such in docs/report_2026-09-02.md.
 
 **Tags:** Alpaca, Featherless, Options Alpha Agents, Claude Code, DeepSeek, Qwen.
 
