@@ -202,7 +202,7 @@ Paper trading is enforced: the agent refuses to start unless `ALPACA_PAPER_TRADE
 * `agent/core` models, clock, config, strategy, sizing, conformal (risk-control radius, online levels, P-vs-Q ledger), regime model, Black-Scholes fallback; `agent/gates` the gate engine; `agent/llm` provider, anonymiser, regime, critic, journal; `agent/execution` orders, flatten, reconciliation; `agent/reporting` audit log
 * `scripts/` history assembly, model training, conformal back-fill and update, pre-flight, kill, flatten, status (CLI), report, dashboard, determinism check, leakage audit
 * `research/` five literature reports, two source-reading reports, the conformal-condor study (G), the tabular-ML study (H) with their experiments, and the synthesis with a 50-entry bibliography
-* `docs/` theory note (definitions, theorems, proofs), incident runbook, the dated log of configuration changes, regime model report, conformal back-fill, the evidence report (e-processes, ceiling), claims file for `reproduce.py`, session reports, write-up, submission text, slides
+* `docs/` theory note (definitions, theorems, proofs), incident runbook, the dated log of configuration changes, regime model report, conformal back-fill, the evidence report (e-processes, ceiling), claims file for `reproduce.py`, session reports, write-up, submission text
 * `lean/` Lean 4 + Mathlib machine-check of the deterministic lemmas (see its README for what is and is not proved)
 
 ## License
