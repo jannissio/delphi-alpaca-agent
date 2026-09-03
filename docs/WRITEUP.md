@@ -37,7 +37,7 @@ pre-registered NO_TRADE day, NFP).** Interval committed 10:15:25 ET: anchor spot
 reference move $5.87, certified radius k = 0.557, i.e. $3.27, short strikes at or beyond 765.22 / 771.76, wing $4.
 315 chain evaluations in the two entry windows, every one NO_TRADE in the strategy stage; the balanced condor at the $4 wing
 was offered at 0.005 to 0.0725 of the wing (87 priced snapshots) against a gate of 0.15 (beta* 0.10 + cost margin 0.05).
-No LLM call, no gate run, no order sent; equity unchanged at $100,000.00 over 758 marks.
+No LLM call, no gate run, no order sent; equity unchanged at $100,000.00 over 1,169 marks (one every 20 seconds, 09:30 to 16:00 ET).
 
 **What the close said.** SPY finished at 773.115, a move of 0.788 implied reference units from the anchor, outside the
 certified interval on the call side. The band's payout ratio was 0.338 of the wing. A condor sold at the best credit the
