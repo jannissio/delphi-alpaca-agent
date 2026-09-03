@@ -1,6 +1,6 @@
 # Conformal Risk Control Condor: back-fill from history
 
-Source: `daily.csv:ratio_1030 2024-01-02..2026-09-01 (668 sessions), wing 0.50 % of spot, replayed 2026-09-02T19:23:36Z`.
+Source: `daily.csv:ratio_1030 2024-01-02..2026-09-01 (668 sessions), wing 0.50 % of spot, replayed 2026-09-03T20:21:02Z`.
 Parameters (config/strategy.yaml `conformal`): rule crc, beta_target 0.1, alpha_target 0.2, gamma 0.005, window 250, clip [0.35, 1.6], margin 0.05, min_scores 50. Score = |close / p_10:30 - 1| / VIX_prev-implied expected absolute daily move (identical unit live and in history); payout ratio = min((score - k)+, omega) / omega with omega = wing / implied move.
 
 State written: beta_t = **0.1642**, alpha_t = **0.2180** after 618 calibrated sessions; 250 scores in the window; updated through 2026-09-01.

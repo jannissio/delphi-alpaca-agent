@@ -27,9 +27,10 @@ logs/
 *.log
 state/
 
-# os / editor
+# os / editor / Office lock files
 .DS_Store
 Thumbs.db
+~$*
 .vscode/
 .idea/
 
