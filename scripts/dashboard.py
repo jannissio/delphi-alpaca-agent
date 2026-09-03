@@ -82,6 +82,14 @@ def logo_uri() -> str:
         return ""
 
 
+def et(ts, fmt: str = "%H:%M") -> str:
+    """Audit timestamps are UTC ISO strings; the page shows US/Eastern market time everywhere."""
+    try:
+        return datetime.fromisoformat(str(ts)).astimezone(ET).strftime(fmt)
+    except Exception:
+        return str(ts)[:16]
+
+
 def _et_min(ts: str) -> float:
     t = datetime.fromisoformat(ts).astimezone(ET)
     return t.hour * 60 + t.minute + t.second / 60
@@ -146,7 +154,7 @@ def session_chart(marks: list[dict], opened: list[dict], closed: list[dict], ses
         x = X(_et_min(r["ts"]))
         out.append(f'<line x1="{x:.1f}" y1="{T}" x2="{x:.1f}" y2="{T + H1}" stroke="{no}" stroke-dasharray="4 3"/>')
         out.append(f'<text x="{x + 4:.1f}" y="{T + 26}" fill="{no}" font-weight="600">close {float(r["exit_debit"]):.2f}, {float(r["pnl"]):+.0f} $</text>')
-    out.append(f'<text x="{L}" y="{T - 12}" fill="{ink}" font-size="15" font-weight="600">Session {esc(session)}: equity change since the first mark (mark-to-market), {len(marks)} marks</text>')
+    out.append(f'<text x="{L}" y="{T - 12}" fill="{ink}" font-size="15" font-weight="600">Session {esc(session)}: equity change since the first mark (mark-to-market), {len(marks)} marks, times ET</text>')
     # greeks while risk was held
     if held:
         for j, (g, label) in enumerate((("delta", "net delta of the book (SPY shares equivalent)"), ("theta", "net theta ($ per day)"))):
@@ -172,7 +180,8 @@ def session_chart(marks: list[dict], opened: list[dict], closed: list[dict], ses
     first, last = float(marks[0]["equity"]), float(marks[-1]["equity"])
     cap = (f"equity first {first:,.2f}, last {last:,.2f}, low {min(float(m['equity']) for m in marks):,.2f}, high {max(float(m['equity']) for m in marks):,.2f}; "
            f"agent's session P&L at the last mark {float(marks[-1].get('session_pnl', 0)):+.2f} $; position held in {len(held)} of {len(marks)} marks"
-           + ("" if held else " (no position all day: the flat line is the point)"))
+           + ("" if held else " (no position all day: the flat line is the point)")
+           + "; marks are written only while the market is open, 09:30 to 16:00 ET, because the account cannot change after the close")
     return "".join(out) + f"<div class='muted'>{esc(cap)}</div>"
 
 
@@ -248,7 +257,7 @@ def pilot_section(archive: Path) -> str:
     # the anatomy: one row per step of the path, straight from the audit log
     steps = []
     for r in recs:
-        k, t = r["kind"], r["ts"][11:19]
+        k, t = r["kind"], et(r["ts"], "%H:%M:%S")
         if k == "llm_regime":
             d, m = r.get("decision") or {}, r.get("meta") or {}
             steps.append([t, "regime vote", f"{m.get('votes', '?')} calls, unanimous {m.get('unanimous')}: {d.get('vol_regime')} / {d.get('trend')} / {d.get('event_risk')} → {d.get('strategy_family')}, veto {d.get('veto')}"])
@@ -277,7 +286,7 @@ def pilot_section(archive: Path) -> str:
         elif k == "position_closed":
             steps.append([t, "position closed", f"{r.get('reason')}: entry {r['entry_credit']:.2f}, exit {r['exit_debit']:.2f}, P&L {r['pnl']:+.2f} $"])
     if steps:
-        out.append("<h3 class='muted'>Anatomy of the trade, from the audit log</h3>" + table(steps, ["UTC", "step", "record"]))
+        out.append("<h3 class='muted'>Anatomy of the trade, from the audit log</h3>" + table(steps, ["ET", "step", "record"]))
     return "".join(out)
 
 
@@ -322,7 +331,7 @@ def certificate_section(conf_iv: list[dict], conf_eod: list[dict]) -> str:
         spot = float(today.get("spot_entry", 0.0))
         rad = k * impl
         parts += ["<div class='grid'>",
-                  tile("today's interval committed", today.get("ts", "")[11:16] + " UTC", f"session {today.get('date')}, rule {today.get('rule')}", "hi"),
+                  tile("today's interval committed", et(today.get("ts", "")) + " ET", f"session {today.get('date')}, rule {today.get('rule')}", "hi"),
                   tile("anchor spot", f"{spot:.2f}", f"VIX prev {float(today.get('vix_prev', 0)):.2f} → implied ref move {impl:.2f} $"),
                   tile("certified radius k", f"{k:.3f}", f"k_crc {float(today.get('k_crc', 0)):.3f}, k_cov {float(today.get('k_cov', 0)):.3f}, n {today.get('n')}"),
                   tile("short strikes at or beyond", f"{spot - rad:.2f} / {spot + rad:.2f}", f"radius {rad:.2f} $, wing {float(today.get('wing_usd', 0)):.2f} $"),
@@ -366,7 +375,6 @@ def build(recs: list[dict], journal: list[dict], account_id: str = "", pilots: l
     pnl = sum(r.get("pnl", 0.0) for r in closed)
     slip = sum(r.get("slippage_vs_mid_usd", 0.0) for r in opened)
     rungs = Counter(str(r.get("fill_rung")) for r in opened)
-    eq = [(m["ts"][:16], m["equity"], m.get("session_pnl", 0)) for m in marks]
     lat = [c.get("latency_ms", 0) for r in regimes for c in r.get("meta", {}).get("calls", [])]
     fam = Counter(r["decision"]["strategy_family"] for r in regimes if r.get("decision"))
     unanimous = Counter(str(r.get("meta", {}).get("unanimous")) for r in regimes)
@@ -378,16 +386,17 @@ def build(recs: list[dict], journal: list[dict], account_id: str = "", pilots: l
     halted = bool(last_beat.get("halted")) or last_beat.get("kind") == "halt"
     state_msg = last_beat.get("msg") or last_beat.get("reason") or ("no heartbeat yet" if not recs else last.get("kind", "-"))
     open_now = last_mark.get("open_positions", last_beat.get("open_positions", 0))
-    now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC") + " (" + datetime.now(ET).strftime("%H:%M ET") + ")"
 
     parts = [f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Delphi dashboard</title>{refresh_tag}
 <style>{CSS}</style></head><body><div class="bar"></div><main>
 <header>{('<img class="logo" src="' + logo + '" alt="Reverse of the Delphi silver tridrachm: four dolphins in an incuse square" width="56" height="56">') if logo else ''}<div><h1>Delphi</h1><span class="sub">0DTE SPY iron condor agent on Alpaca paper, conformal risk control, 31 hard gates</span></div></header>
-<div class="sub">Competition paper account <b>{esc(account_id or 'n/a')}</b>: brand-new, dedicated, $100,000 starting balance, options level 3; only the submitted agent has ever traded on it (from 2026-09-03). The 2026-09-02 pilot ran on a separate development account and is shown at the bottom, labelled.</div>
+<div class="sub">Competition paper account <b>{esc(account_id or 'n/a')}</b>: brand-new, dedicated, $100,000 starting balance, options level 3; only the submitted agent has ever traded on it (from 2026-09-03). The 2026-09-02 pilot ran on a separate development account and is shown further down, labelled.</div>
+<div class="sub">All times on this page are US/Eastern market time (ET; CEST is ET + 6 h). The audit log itself stores UTC. The page is regenerated from the log, not streamed: the last record above says how fresh it is.</div>
 <div class="claim">We do not claim a statistically detectable edge. We claim a risk process that behaved exactly as specified.</div>
 <div class="grid">
-{tile("agent state", state_msg[:60], f"last record {esc(last.get('ts', '')[:16])} UTC" if last else "", "warn" if halted else "hi")}
+{tile("agent state", state_msg[:60], f"last record {esc(et(last.get('ts', ''), '%m-%d %H:%M'))} ET" if last else "", "warn" if halted else "hi")}
 {tile("equity", f"{last_mark['equity']:,.2f} USD" if last_mark else "-", f"session P&L {last_mark.get('session_pnl', 0):+.2f}, campaign {last_mark.get('campaign_pnl', 0):+.2f}" if last_mark else "no mark yet")}
 {tile("open positions", open_now, f"opened {len(opened)}, closed {len(closed)}")}
 {tile("sessions on this account", len(sessions) or 0, ", ".join(sessions) if sessions else "none yet")}
@@ -411,21 +420,21 @@ def build(recs: list[dict], journal: list[dict], account_id: str = "", pilots: l
                  "strikes over the calibration set. The gate compares Q with &beta;* + margin; P is shown for the reader, never used to trade. "
                  "One row per candidate strike pair per session; n counts evaluations of that pair.</div>")
     if conf_iv:
-        rows = [[r["ts"][:16], r["session"]["date"], r["session"].get("rule"), f"{r['session'].get('beta_t', 0):.4f}", f"{r['session'].get('k_crc', 0):.3f}",
+        rows = [[et(r["ts"], "%m-%d %H:%M"), r["session"]["date"], r["session"].get("rule"), f"{r['session'].get('beta_t', 0):.4f}", f"{r['session'].get('k_crc', 0):.3f}",
                  f"{r['session']['alpha_t']:.4f}", f"{r['session'].get('k_cov', 0):.3f}", r["session"]["n"], f"{r['session']['k']:.3f}",
                  r["session"]["vix_prev"], f"{r['session']['impl_ref_usd']:.2f}", r["session"]["spot_entry"]] for r in conf_iv]
-        parts.append(table(rows, ["committed (UTC)", "session", "rule", "beta_t", "k_crc", "alpha_t", "k_cov", "n", "k used", "VIX prev", "implied ref move $", "anchor spot"]))
+        parts.append(table(rows, ["committed (ET)", "session", "rule", "beta_t", "k_crc", "alpha_t", "k_cov", "n", "k used", "VIX prev", "implied ref move $", "anchor spot"]))
     if conf_led:
         agg: dict = {}
         for r in conf_led:
             l, c, cf = r["ledger"], r["candidate"], r.get("counterfactual_fixed") or {}
             key = (r.get("session"), c["short_put"], c["short_call"], bool(l["passes"]))
-            a = agg.setdefault(key, {"first": r["ts"][11:16], "last": r["ts"][11:16], "n": 0, "gap": [], "q": [], "p": [], "cf": cf.get("gap")})
-            a["last"] = r["ts"][11:16]; a["n"] += 1; a["gap"].append(l["gap"]); a["q"].append(l.get("q_ref", l["q_mid"])); a["p"].append(l.get("beta_empirical", l["p_mid"]))
+            a = agg.setdefault(key, {"first": et(r["ts"]), "last": et(r["ts"]), "n": 0, "gap": [], "q": [], "p": [], "cf": cf.get("gap")})
+            a["last"] = et(r["ts"]); a["n"] += 1; a["gap"].append(l["gap"]); a["q"].append(l.get("q_ref", l["q_mid"])); a["p"].append(l.get("beta_empirical", l["p_mid"]))
         rows = [[s, f"{a['first']}-{a['last']}", a["n"], f"{sp:.0f}/{sc:.0f}", f"{sum(a['q']) / a['n']:.3f}", f"{sum(a['p']) / a['n']:.3f}",
                  f"{min(a['gap']):+.3f}..{max(a['gap']):+.3f}", tag(ok, "TRADE" if ok else "NO_TRADE"),
                  "-" if a["cf"] is None else f"{a['cf']:+.3f}"] for (s, sp, sc, ok), a in agg.items()]
-        parts.append(table(rows, ["session", "UTC", "n", "shorts", "credit/wing (Q)", "empirical payout at strikes (P)", "gate gap vs beta*", "decision", "fixed-rule gap"]))
+        parts.append(table(rows, ["session", "ET", "n", "shorts", "credit/wing (Q)", "empirical payout at strikes (P)", "gate gap vs beta*", "decision", "fixed-rule gap"]))
     elif conf_iv:
         parts.append("<div class='muted'>Interval committed; no candidate strike pair has reached gate 31 yet.</div>")
     else:
@@ -461,13 +470,13 @@ def build(recs: list[dict], journal: list[dict], account_id: str = "", pilots: l
     rows = []
     for r in opened:
         p = r["position"]
-        rows.append([p["opened_ts"][:16], p["underlying"], p["contracts"], f"{p['entry_credit']:.2f}",
+        rows.append([et(p["opened_ts"], "%m-%d %H:%M"), p["underlying"], p["contracts"], f"{p['entry_credit']:.2f}",
                      f"{p['max_loss_total']:.0f}", r.get("fill_rung"), f"{r.get('slippage_vs_mid_usd', 0):+.2f}",
                      ", ".join(f"{l['side'][0].upper()}{l['strike']:.0f}{l['right'][0].upper()}" for l in p["legs"])])
-    parts.append(table(rows, ["opened (UTC)", "und.", "qty", "credit", "max loss $", "fill rung", "slippage $", "legs"]) if rows else '<div class="muted">none</div>')
-    rows = [[r["ts"][:16], r["position_id"], r["reason"], f"{r['entry_credit']:.2f}", f"{r['exit_debit']:.2f}", f"{r['pnl']:+.2f}"] for r in closed]
+    parts.append(table(rows, ["opened (ET)", "und.", "qty", "credit", "max loss $", "fill rung", "slippage $", "legs"]) if rows else '<div class="muted">none</div>')
+    rows = [[et(r["ts"], "%m-%d %H:%M"), r["position_id"], r["reason"], f"{r['entry_credit']:.2f}", f"{r['exit_debit']:.2f}", f"{r['pnl']:+.2f}"] for r in closed]
     if rows:
-        parts.append(table(rows, ["closed (UTC)", "id", "reason", "entry", "exit", "P&L $"]))
+        parts.append(table(rows, ["closed (ET)", "id", "reason", "entry", "exit", "P&L $"]))
 
     # ---- LLM
     parts.append("<h2>LLM</h2>")
@@ -477,9 +486,9 @@ def build(recs: list[dict], journal: list[dict], account_id: str = "", pilots: l
     rows = []
     for r in regimes[-12:]:
         d, m = r.get("decision") or {}, r.get("meta") or {}
-        rows.append([r["ts"][11:16], d.get("vol_regime"), d.get("trend"), d.get("event_risk"), d.get("strategy_family"), d.get("veto"),
+        rows.append([et(r["ts"]), d.get("vol_regime"), d.get("trend"), d.get("event_risk"), d.get("strategy_family"), d.get("veto"),
                      m.get("entropy_bits", {}).get("strategy_family") if m.get("entropy_bits") else "-", (d.get("rationale") or "")[:140]])
-    parts.append(table(rows, ["UTC", "vol", "trend", "event", "family", "veto", "H(family) bits", "rationale"]) if rows else '<div class="muted">no LLM calls yet</div>')
+    parts.append(table(rows, ["ET", "vol", "trend", "event", "family", "veto", "H(family) bits", "rationale"]) if rows else '<div class="muted">no LLM calls yet</div>')
     if evs:
         e = evs[-1]
         parts.append(f"<h2>Term-structure event variance (Dubinsky et al. 2019)</h2><div class='muted'>sigma_event {e.get('sigma_event')} "
@@ -525,10 +534,10 @@ def build(recs: list[dict], journal: list[dict], account_id: str = "", pilots: l
     if not journal:
         parts.append("<div class='muted'>no journal entries yet</div>")
     for j in journal[-8:]:
-        parts.append(f"<p><span class='muted'>{esc(j['ts'][:16])} [{esc(j['tier'])}]</span> {esc(j['entry'])}"
+        parts.append(f"<p><span class='muted'>{esc(et(j['ts'], '%m-%d %H:%M'))} ET [{esc(j['tier'])}]</span> {esc(j['entry'])}"
                      + (f" <em>Lesson: {esc(j['lesson'])}</em>" if j.get("lesson") else "") + "</p>")
     if halts:
-        parts.append("<h2>Halts</h2>" + "".join(f"<p class='no'>{esc(h['ts'][:16])}: {esc(h['reason'])}</p>" for h in halts))
+        parts.append("<h2>Halts</h2>" + "".join(f"<p class='no'>{esc(et(h['ts'], '%m-%d %H:%M'))} ET: {esc(h['reason'])}</p>" for h in halts))
     parts.append("<h2>Not reported, on purpose</h2><p class='muted'>Sharpe ratio, win rate, annualised return, profit factor. With a handful of observations these are noise: "
                  "the minimum track record to certify an annualised Sharpe of 1.0 at 95 % with skew -1.5 and kurtosis 6 is 751 daily observations (Bailey &amp; Lopez de Prado 2014).</p>")
     parts.append(f"<footer>Generated {now_utc} from state/audit.jsonl and state/conformal.json by scripts/dashboard.py. No server, no secrets, no live data: "
