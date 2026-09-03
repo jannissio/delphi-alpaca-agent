@@ -26,7 +26,7 @@ from agent.core.strategy import (StrategyError, atm_iv, build_condor, implied_ev
 from agent.data import cboe  # noqa: E402
 from agent.data.alpaca_data import AlpacaData  # noqa: E402
 from agent.data.calendar import flags_for, upcoming_for_prompt  # noqa: E402
-from agent.execution.orders import walk_prices_ticks  # noqa: E402
+from agent.execution.orders import tick_rung_fn, walk_prices_ticks  # noqa: E402
 from agent.gates.engine import GateEngine  # noqa: E402
 from agent.llm import regime as regime_mod  # noqa: E402
 from agent.llm.provider import FeatherlessProvider  # noqa: E402
@@ -145,7 +145,12 @@ def main() -> None:
     print(f"== sizing: config pilot {'ON' if pilot_cfg else 'OFF'} -> first order {cand.contracts} contracts "
           f"(pilot {qty}, full {qty_full}); session budget {budget.session_budget:.0f}; max loss/package {cand.max_loss_per_package:.0f}")
     tick = package_tick(cand.legs)
-    print("== ladder", walk_prices_ticks(cand.credit_mid, cand.credit_natural, tick, [0, 1, 2], True), "tick", tick)
+    ex = s.strategy["execution"]
+    offsets = [int(x) for x in ex["walk_ticks"]] + ([None] * int(ex.get("natural_rung_repeats", 1)) if bool(ex["final_rung_natural"]) else [])
+    rung = tick_rung_fn(offsets, tick)
+    planned = [rung(i, cand.credit_mid, cand.credit_natural) for i in range(len(offsets))]
+    print(f"== ladder (planned from the decision quotes; every rung is re-quoted at send time): {planned} offsets {offsets} "
+          f"step {ex['walk_step_interval_s']} s, tick {tick}, floor >= gated credit")
     flags = flags_for(s.calendar, now)
     regime = None
     if "--no-llm" not in sys.argv:
