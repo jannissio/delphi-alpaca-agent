@@ -1,17 +1,19 @@
 {
   "session": "2026-09-03",
-  "records": 1691,
+  "records": 2183,
   "kinds": {
     "agent_start": 1,
-    "heartbeat": 269,
-    "mark": 758,
+    "heartbeat": 348,
+    "mark": 1169,
     "regime_snapshot": 21,
     "vix1d_tercile": 2,
     "regime_model": 2,
     "chain": 315,
     "event_vol": 7,
     "conformal_interval": 1,
-    "no_trade": 315
+    "no_trade": 315,
+    "flatten_deadline_reached": 1,
+    "conformal_eod": 1
   },
   "gate_pass": {},
   "gate_fail": {},
@@ -192,7 +194,26 @@
     ],
     "evaluations": 0,
     "decisions": {},
-    "eod": [],
+    "eod": [
+      {
+        "date": "2026-09-03",
+        "rule": "crc",
+        "k": 0.5573329910639024,
+        "k_cov": 0.5977023222836039,
+        "k_crc": 0.5573329910639024,
+        "omega": 0.681300004310217,
+        "ratio": 0.7877531299836799,
+        "err": 1,
+        "loss": 0.33820657193898973,
+        "alpha_before": 0.21900000000000003,
+        "alpha_after": 0.21500000000000002,
+        "beta_before": 0.16471794903546702,
+        "beta_after": 0.16352691617577209,
+        "close": 773.115,
+        "spot_entry": 768.49,
+        "reconstructed": false
+      }
+    ],
     "errors": 0
   }
 }

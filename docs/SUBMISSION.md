@@ -53,6 +53,12 @@ starting balance, options level 3; only the submitted agent has ever traded on i
 2026-09-02 (fixed 1.10x rule, one contract, +$14) ran on a separate development account, PA314NYH4H7G, and is
 reported as such in docs/report_2026-09-02.md.
 
+**Result on the competition account (2026-09-03):** 0 trades, P&L $0. The market offered 0.005 to 0.0725 of the wing for
+the certified band all day against a gate of 0.15, so no order was sent; at the close SPY stood outside the certified
+interval and the band would have paid out 0.338 of the wing, more than four times the best credit offered. The refusal
+was the right decision, and the calibration absorbed the miss as designed (beta_t 0.1647 to 0.1635). Friday 2026-09-04 is
+a pre-registered NO_TRADE day (NFP). Details: docs/WRITEUP.md, Results; docs/report_2026-09-03.md.
+
 **Tags:** Alpaca, Featherless, Options Alpha Agents, Claude Code, DeepSeek, Qwen.
 
 **Links:** GitHub (MIT), one-page write-up (docs/WRITEUP.md), theory note (docs/THEORY.md), slides

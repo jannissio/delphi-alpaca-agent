@@ -32,4 +32,22 @@ The P-versus-Q ledger for every session (beta*, beta_t, n, k, strikes, credit/wi
 
 ## Results
 
-*(filled in after the Friday cutoff; see `docs/report_<date>.md`)*
+**Competition account PA31SEVJV9P9, session 2026-09-03 (the only trading day of the submitted agent; Friday 2026-09-04 is a
+pre-registered NO_TRADE day, NFP).** Interval committed 10:15:25 ET: anchor spot 768.49, VIX previous close 15.2, implied
+reference move $5.87, certified radius k = 0.557, i.e. $3.27, short strikes at or beyond 765.22 / 771.76, wing $4.
+315 chain evaluations in the two entry windows, every one NO_TRADE in the strategy stage; the balanced condor at the $4 wing
+was offered at 0.005 to 0.0725 of the wing (87 priced snapshots) against a gate of 0.15 (beta* 0.10 + cost margin 0.05).
+No LLM call, no gate run, no order sent; equity unchanged at $100,000.00 over 758 marks.
+
+**What the close said.** SPY finished at 773.115, a move of 0.788 implied reference units from the anchor, outside the
+certified interval on the call side. The band's payout ratio was 0.338 of the wing. A condor sold at the best credit the
+market offered all day (0.0725 of the wing) would have lost about 0.27 of the wing, $106 per contract, before costs.
+The gate's refusal was the right decision on this day; the certificate absorbed the miss as designed: beta_t 0.1647 to
+0.1635, alpha_t 0.219 to 0.215, 620 calibrated sessions, risk e-process W_max 2.66 and anytime p 0.38 (unchanged; the
+certificate stands). Full record: `docs/report_2026-09-03.md`, the ledger `docs/ledger.json`, the picture
+`docs/band_price_2026-09-03.svg`.
+
+**Trades on the competition account: 0. Realised P&L: $0.** The one filled trade of the project (development account
+PA314NYH4H7G, 2026-09-02, one contract, +$14, fixed 1.10x rule before the conformal rule went live) is reported separately
+in `docs/report_2026-09-02.md` and shown on the dashboard as the anatomy of the path; under the rule now running that day
+would not have traded either (fill at 0.147 of the wing, gate 0.15).

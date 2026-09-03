@@ -119,6 +119,15 @@ distribution against option prices and trade the gap. Our contribution is the su
 distribution-free bound on the expected payout ratio replaces the estimated physical probability, and the price of the
 identical event is read off the quote rather than modelled.
 
+## Result on the competition account (2026-09-03)
+
+Zero trades, P&L $0, and that is the mechanism: the market offered 0.005 to 0.0725 of the wing for the certified band
+all day against a gate of 0.15, so no order was sent. At the close SPY stood outside the certified interval and the band
+would have paid out 0.338 of the wing, more than four times the best credit offered. The one filled trade of the project
+(development account, 2026-09-02, one contract, +$14) is reported separately and would not have passed the current rule.
+Full account: `docs/WRITEUP.md` (Results), `docs/report_2026-09-03.md`, the dashboard `docs/index.html`, the picture
+`docs/band_price_2026-09-03.svg`.
+
 ## What was trained on history, and what it is allowed to do
 
 `scripts/history_data.py` assembles 9,230 sessions (S&P 500 since 1975 and VIX since 1990 from Cboe;

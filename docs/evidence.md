@@ -1,16 +1,16 @@
 # Anytime-valid evidence (docs/THEORY.md section 9)
 
-Source: `conformal.json` ledger (619 calibrated sessions, 2024-03-14..2026-09-02), audit log (0 traded sessions with a closed payout ratio). Bets pre-registered: lambda = 1.0 (admissible [0, 10]), eta = 1.0 (capped at 1/(1-g)). Reported, never used to halt.
+Source: `conformal.json` ledger (620 calibrated sessions, 2024-03-14..2026-09-03), audit log (0 traded sessions with a closed payout ratio). Bets pre-registered: lambda = 1.0 (admissible [0, 10]), eta = 1.0 (capped at 1/(1-g)). Reported, never used to halt.
 
 ## Risk process (evidence against the certificate)
 
-Null: E[l_t | past] <= beta* = 0.1. W_T = 8.27e-12, running maximum 2.659, anytime-valid p-value 0.376 (a value below 0.05 would reject the certificate at level 5 %).
+Null: E[l_t | past] <= beta* = 0.1. W_T = 1.024e-11, running maximum 2.659, anytime-valid p-value 0.376 (a value below 0.05 would reject the certificate at level 5 %).
 
 | Year | sessions | mean payout ratio | W_T | max W | anytime p |
 |---|---|---|---|---|---|
 | 2024 | 202 | 0.070 | 5.55e-05 | 2.66 | 0.376 |
 | 2025 | 249 | 0.079 | 3.31e-05 | 6.98 | 0.143 |
-| 2026 | 168 | 0.090 | 0.0045 | 1 | 1.000 |
+| 2026 | 169 | 0.091 | 0.00558 | 1 | 1.000 |
 
 ## Profit process (evidence for profitability, live sessions only)
 
