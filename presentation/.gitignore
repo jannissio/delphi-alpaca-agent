@@ -1,4 +1,5 @@
-# Working files for the video, not part of the submission.
+# Working files for the deck and the video. Deliberately outside the
+# submission: what ships is Delphi_deck.pdf and Delphi_deck.pptx.
 build_deck.py
 README.md
 SCRIPT.md
