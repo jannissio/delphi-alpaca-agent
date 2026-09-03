@@ -55,5 +55,5 @@ reported as such in docs/report_2026-09-02.md.
 
 **Tags:** Alpaca, Featherless, Options Alpha Agents, Claude Code, DeepSeek, Qwen.
 
-**Links:** GitHub (MIT), one-page write-up (docs/WRITEUP.md), theory note (docs/THEORY.md), dashboard and ledger
-(docs/index.html, docs/ledger.json), video.
+**Links:** GitHub (MIT), one-page write-up (docs/WRITEUP.md), theory note (docs/THEORY.md), slides
+(presentation/Delphi_deck.pdf), dashboard and ledger (docs/index.html, docs/ledger.json), video.

@@ -554,7 +554,7 @@ Zitatprüfung von 35 tragenden Quellen gegen Primärquellen erstellt (Ordner au�
    Formulierung "E[Payoff] >= 5 % der Flügelbreite" wurde überall ersetzt. Credit wird am erwarteten Fill gelesen.
 6. **Lean-Vorarbeit existiert** (Ushakov & Berdinsky 2026 in Lean 4; Coelho 2026; Echenim/Guiol/Peltier 2018;
    Coq-Matching; Imandra). Enge Fassung in `lean/README.md`.
-7. **Weitere Umformulierungen:** drei Stimmen = Enthaltungsfilter, kein Ensemble (Kim 2026; Bahuguna 2026);
+7. **Weitere Umformulierungen:** drei Stimmen = Enthaltungsfilter, kein Ensemble (Kim 2026, *Are Diversity Metrics Measuring Diversity?*, arXiv:2607.20768: Mehrheitsvotum schlägt das beste Mitglied in 9,98 % der 3er-Teilmengen; Bahuguna 2026, arXiv:2608.11403: Mehrheitsvotum senkt die Genauigkeit auf 56,6 % / 65,7 % der schweren Aufgaben; Zhang et al. 2026, arXiv:2608.18795: Übereinstimmung ist "graded evidence, not certification");
    Determinismus ist eine Assurance-, keine Korrektheitseigenschaft (Thinking Machines 2025: 80 von 1.000
    Temperatur-0-Antworten verschieden); "Level passt online an" ist derzeit ein wirkungsloses Sicherheitsventil;
    Satz-4-Slack 0,224 ist auf Jahresfrist vakuos; Koviazin et al. = IC-AIF 2026, DOI 10.1145/3800973.3801029;
