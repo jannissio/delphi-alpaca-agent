@@ -171,11 +171,32 @@ Audit log (JSONL) -> journal (LLM prose from facts) -> post-session report -> de
 * **Alpaca MCP server**: used by the operator (Claude Code) to inspect the account and chains during development and in the demo.
 * **Featherless.ai**: open-weight models (`deepseek-ai/DeepSeek-V3.2` for regime and critic, `Qwen/Qwen3-30B-A3B-Instruct-2507` for the journal) through the OpenAI-compatible endpoint.
 
+## Setup
+
+1. Alpaca: sign up, switch the dashboard to **Paper Trading**, create a brand-new paper account for the competition
+   (starting balance $100,000, options trading level 3) and generate its API key pair; note the paper account ID.
+2. Featherless.ai: create an API key (the hackathon's model provider; open-weight models through the OpenAI-compatible endpoint).
+3. Create `.env` in the repository root (git-ignored; the agent refuses to start without paper mode):
+
+   ```
+   ALPACA_API_KEY=...            # paper key id
+   ALPACA_SECRET_KEY=...         # paper secret
+   ALPACA_PAPER_TRADE=true       # enforced; the agent never targets the live endpoint
+   ALPACA_ACCOUNT_ID=...         # the competition paper account, shown on the dashboard
+   FEATHERLESS_API_KEY=...
+   FEATHERLESS_MODEL_STRONG=deepseek-ai/DeepSeek-V3.2          # regime vote and critic
+   FEATHERLESS_MODEL_CHEAP=Qwen/Qwen3-30B-A3B-Instruct-2507    # journal prose
+   ```
+
+4. Alpaca CLI (`scripts/status.sh`, the independent reconciliation path): install the release binary from
+   https://github.com/alpacahq/cli/releases and put it on PATH; it reads the same two Alpaca variables.
+5. Alpaca MCP server (used by the operator in Claude Code): `pip install alpaca-mcp-server` into the venv, then
+   `claude mcp add alpaca --scope user --transport stdio .venv/Scripts/alpaca-mcp-server.exe --env ALPACA_API_KEY=... --env ALPACA_SECRET_KEY=... --env ALPACA_PAPER_TRADE=true`.
+
 ## Run
 
 ```bash
 python -m venv .venv && .venv/Scripts/pip install -r requirements.txt   # Windows; use bin/ on Unix
-cp .env.example .env        # fill in paper keys and the Featherless key; never commit .env
 .venv/Scripts/python -m pytest -q             # 37 tests incl. a fake end-to-end cycle, the byte-identical-order test, the re-quoting ladder and the conformal arithmetic
 python scripts/history_data.py                # assemble state/history/daily.csv (Cboe + Alpaca IEX)
 python scripts/conformal_backfill.py --force  # replay both online tracks through history -> state/conformal.json, docs/conformal_backfill.md

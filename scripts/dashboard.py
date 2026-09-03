@@ -58,6 +58,30 @@ def tag(ok: bool, text: str) -> Raw:
     return Raw(f"<span class='tag {'ok' if ok else 'no'}'>{esc(text)}</span>")
 
 
+def logo_uri() -> str:
+    """The team cover (reverse of the Delphi silver tridrachm, four dolphins) as a small round data URI so the page
+    stays self-contained. Returns '' if Pillow or the image is missing."""
+    src = ROOT / "team_cover" / "Delphi_DE-MUS-814819-18215461-rv.jpg"
+    try:
+        import base64
+        import io
+        from PIL import Image, ImageDraw
+        im = Image.open(src).convert("RGB")
+        w, h = im.size
+        cx, cy, half = int(w * 0.503), int(h * 0.488), int(min(w, h) * 0.27)
+        crop = im.crop((cx - half, cy - half, cx + half, cy + half)).resize((112, 112), Image.LANCZOS)
+        mask = Image.new("L", crop.size, 0)
+        ImageDraw.Draw(mask).ellipse((0, 0, 111, 111), fill=255)
+        out = Image.new("RGBA", crop.size, (0, 0, 0, 0))
+        out.paste(crop, (0, 0), mask)
+        out = out.quantize(128, method=Image.Quantize.FASTOCTREE)
+        buf = io.BytesIO()
+        out.save(buf, format="PNG", optimize=True)
+        return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+    except Exception:
+        return ""
+
+
 def _et_min(ts: str) -> float:
     t = datetime.fromisoformat(ts).astimezone(ET)
     return t.hour * 60 + t.minute + t.second / 60
@@ -161,7 +185,9 @@ CSS = """
 body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 "Segoe UI",system-ui,Roboto,Helvetica,Arial,sans-serif}
 .bar{height:8px;background:var(--yellow)}
 main{max-width:1040px;margin:0 auto;padding:24px 20px 64px}
-header{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 18px;margin-bottom:4px}
+header{display:flex;align-items:center;gap:14px;margin-bottom:6px}
+header div{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px}
+.logo{width:56px;height:56px;border-radius:50%;box-shadow:0 0 0 3px var(--yellow);flex:none;background:#fff}
 h1{font-size:28px;letter-spacing:-.01em;margin:0}
 .sub{color:var(--muted);font-size:14px}
 h2{font-size:17px;margin:36px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line);position:relative}
@@ -315,6 +341,7 @@ def certificate_section(conf_iv: list[dict], conf_eod: list[dict]) -> str:
 
 def build(recs: list[dict], journal: list[dict], account_id: str = "", pilots: list[Path] = (), refresh: int = 0) -> str:
     refresh_tag = f'<meta http-equiv="refresh" content="{int(refresh)}">' if refresh else ""
+    logo = logo_uri()
     sessions = sorted({r.get("session") for r in recs if isinstance(r.get("session"), str)})  # conformal_interval carries a session dict
     marks = [r for r in recs if r["kind"] == "mark"]
     opened = [r for r in recs if r["kind"] == "position_opened"]
@@ -356,7 +383,7 @@ def build(recs: list[dict], journal: list[dict], account_id: str = "", pilots: l
     parts = [f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Delphi dashboard</title>{refresh_tag}
 <style>{CSS}</style></head><body><div class="bar"></div><main>
-<header><h1>Delphi</h1><span class="sub">0DTE SPY iron condor agent on Alpaca paper, conformal risk control, 31 hard gates</span></header>
+<header>{('<img class="logo" src="' + logo + '" alt="Reverse of the Delphi silver tridrachm: four dolphins in an incuse square" width="56" height="56">') if logo else ''}<div><h1>Delphi</h1><span class="sub">0DTE SPY iron condor agent on Alpaca paper, conformal risk control, 31 hard gates</span></div></header>
 <div class="sub">Competition paper account <b>{esc(account_id or 'n/a')}</b>: brand-new, dedicated, $100,000 starting balance, options level 3; only the submitted agent has ever traded on it (from 2026-09-03). The 2026-09-02 pilot ran on a separate development account and is shown at the bottom, labelled.</div>
 <div class="claim">We do not claim a statistically detectable edge. We claim a risk process that behaved exactly as specified.</div>
 <div class="grid">

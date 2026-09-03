@@ -1,6 +1,10 @@
 # Working files for the deck and the video. Deliberately outside the
 # submission: what ships is Delphi_deck.pdf and Delphi_deck.pptx.
 build_deck.py
+merge_audio.ps1
 README.md
 SCRIPT.md
 Delphi_deck_guides.pptx
+Delphi_deck_recorded.pptx
+Delphi_deck_with_audio.pptx
+*.ps1

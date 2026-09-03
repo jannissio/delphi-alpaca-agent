@@ -2,7 +2,7 @@
 # Monitoring / reconciliation snapshot via the Alpaca CLI (JSON output appended to logs/cli_status.jsonl).
 # Runs from cron-like loops (`watch -n 60 scripts/status.sh`) independently of the Python agent, so a
 # second, independent code path (gate 22) sees the same account. Requires `alpaca` on PATH and the
-# ALPACA_API_KEY / ALPACA_SECRET_KEY env vars (see SETUP.md). Paper endpoint is the CLI default.
+# ALPACA_API_KEY / ALPACA_SECRET_KEY env vars (see README, Setup). Paper endpoint is the CLI default.
 set -u
 cd "$(dirname "$0")/.." || exit 1
 mkdir -p logs

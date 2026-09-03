@@ -1,7 +1,6 @@
-# secrets — never commit
+# secrets — never commit (no template file either: the variables are listed in README, Setup)
 .env
 .env.*
-!.env.example
 api_keys_NEVER_PUBLISH/
 *.key
 *.pem
@@ -22,12 +21,11 @@ __pycache__/
 build/
 dist/
 
-# runtime state and logs (journal is published separately, curated)
+# runtime state and logs (the audit log is published as docs/ledger.json and the dashboard, curated)
 runtime/
 logs/
 *.log
-state/*.json
-state/*.jsonl
+state/
 
 # os / editor
 .DS_Store
