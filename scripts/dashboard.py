@@ -16,6 +16,9 @@ import sys
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
+
+ET = ZoneInfo("America/New_York")
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -53,6 +56,100 @@ def tile(label: str, value, note: str = "", cls: str = "") -> str:
 
 def tag(ok: bool, text: str) -> Raw:
     return Raw(f"<span class='tag {'ok' if ok else 'no'}'>{esc(text)}</span>")
+
+
+def _et_min(ts: str) -> float:
+    t = datetime.fromisoformat(ts).astimezone(ET)
+    return t.hour * 60 + t.minute + t.second / 60
+
+
+def session_chart(marks: list[dict], opened: list[dict], closed: list[dict], session: str, width: int = 860) -> str:
+    """The account over one session, from the 20-second mark records: equity change since the first mark (mark-to-market,
+    broker truth), the span while a position was open, entry and exit markers, and the net delta and theta of the book
+    while it held risk. Pure SVG; a flat day draws a flat line on a +/- 10 $ scale so that 'nothing happened' is visible."""
+    if not marks:
+        return "<div class='muted'>no marks yet</div>"
+    xs = [_et_min(m["ts"]) for m in marks]
+    base = float(marks[0]["equity"])
+    pnl = [float(m["equity"]) - base for m in marks]
+    x0, x1 = min(9 * 60 + 30, min(xs)), max(16 * 60, max(xs))
+    lo, hi = min(pnl), max(pnl)
+    if hi - lo < 1.0:
+        lo, hi = min(lo, -10.0), max(hi, 10.0)
+    pad = (hi - lo) * 0.15
+    lo, hi = lo - pad, hi + pad
+    held = [m for m in marks if m.get("open_positions")]
+    L, R, T = 64, 24, 30
+    H1, H2, GAP, B = 190, 80, 34, 28
+    height = T + H1 + (2 * (H2 + GAP) if held else 0) + B
+    pw = width - L - R
+
+    def X(m: float) -> float:
+        return L + pw * (m - x0) / (x1 - x0)
+
+    def Y(v: float) -> float:
+        return T + H1 * (1 - (v - lo) / (hi - lo))
+
+    def hhmm(m: float) -> str:
+        return f"{int(m) // 60:02d}:{int(m) % 60:02d}"
+
+    ink, muted, line, yellow, purple, ok, no = "#101010", "#6a6a66", "#e4e2dc", "#FCD72B", "#461D9C", "#1f7a4d", "#a33a2a"
+    out = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="100%" role="img" '
+           f'aria-label="account over the session {esc(session)}" font-family="Segoe UI,system-ui,sans-serif" font-size="12">',
+           f'<rect x="0" y="0" width="{width}" height="{height}" fill="#ffffff"/>']
+    # span while a position was open
+    if held:
+        out.append(f'<rect x="{X(_et_min(held[0]["ts"])):.1f}" y="{T}" width="{max(2.0, X(_et_min(held[-1]["ts"])) - X(_et_min(held[0]["ts"]))):.1f}" height="{H1}" fill="{yellow}" opacity="0.18"/>')
+    # y grid, 5 ticks
+    for i in range(5):
+        v = lo + (hi - lo) * i / 4
+        out.append(f'<line x1="{L}" y1="{Y(v):.1f}" x2="{width - R}" y2="{Y(v):.1f}" stroke="{line}"/>')
+        out.append(f'<text x="{L - 8}" y="{Y(v) + 4:.1f}" text-anchor="end" fill="{muted}">{v:+.0f} $</text>')
+    if lo < 0 < hi:
+        out.append(f'<line x1="{L}" y1="{Y(0):.1f}" x2="{width - R}" y2="{Y(0):.1f}" stroke="{muted}" stroke-dasharray="3 3"/>')
+    for m in range(int(x0) - int(x0) % 60 + 60, int(x1) + 1, 60):
+        out.append(f'<text x="{X(m):.1f}" y="{T + H1 + 16}" text-anchor="middle" fill="{muted}">{hhmm(m)}</text>')
+    pts = " ".join(f"{X(x):.1f},{Y(v):.1f}" for x, v in zip(xs, pnl))
+    out.append(f'<polygon fill="{purple}" opacity="0.08" points="{X(xs[0]):.1f},{Y(max(lo, min(0, hi))):.1f} {pts} {X(xs[-1]):.1f},{Y(max(lo, min(0, hi))):.1f}"/>')
+    out.append(f'<polyline fill="none" stroke="{purple}" stroke-width="1.8" points="{pts}"/>')
+    out.append(f'<circle cx="{X(xs[-1]):.1f}" cy="{Y(pnl[-1]):.1f}" r="3.5" fill="{purple}"/>')
+    out.append(f'<text x="{min(X(xs[-1]) + 8, width - R - 60):.1f}" y="{Y(pnl[-1]) + 4:.1f}" fill="{purple}" font-weight="600">{pnl[-1]:+.2f} $</text>')
+    for r in opened:
+        x = X(_et_min(r["ts"]))
+        out.append(f'<line x1="{x:.1f}" y1="{T}" x2="{x:.1f}" y2="{T + H1}" stroke="{ok}" stroke-dasharray="4 3"/>')
+        out.append(f'<text x="{x + 4:.1f}" y="{T + 12}" fill="{ok}" font-weight="600">open {float(r["position"]["entry_credit"]):.2f} x {r["position"]["contracts"]}</text>')
+    for r in closed:
+        x = X(_et_min(r["ts"]))
+        out.append(f'<line x1="{x:.1f}" y1="{T}" x2="{x:.1f}" y2="{T + H1}" stroke="{no}" stroke-dasharray="4 3"/>')
+        out.append(f'<text x="{x + 4:.1f}" y="{T + 26}" fill="{no}" font-weight="600">close {float(r["exit_debit"]):.2f}, {float(r["pnl"]):+.0f} $</text>')
+    out.append(f'<text x="{L}" y="{T - 12}" fill="{ink}" font-size="15" font-weight="600">Session {esc(session)}: equity change since the first mark (mark-to-market), {len(marks)} marks</text>')
+    # greeks while risk was held
+    if held:
+        for j, (g, label) in enumerate((("delta", "net delta of the book (SPY shares equivalent)"), ("theta", "net theta ($ per day)"))):
+            top = T + H1 + GAP + j * (H2 + GAP)
+            vals = [(x, float(m["greeks"].get(g, 0.0))) for x, m in zip(xs, marks) if m.get("open_positions")]
+            gl, gh = min(v for _, v in vals), max(v for _, v in vals)
+            gl, gh = min(gl, 0.0), max(gh, 0.0)
+            if gh - gl < 1e-9:
+                gl, gh = gl - 1, gh + 1
+            gp = (gh - gl) * 0.15
+            gl, gh = gl - gp, gh + gp
+
+            def Yg(v: float, top=top, gl=gl, gh=gh) -> float:
+                return top + H2 * (1 - (v - gl) / (gh - gl))
+
+            out.append(f'<text x="{L}" y="{top - 8}" fill="{ink}" font-weight="600">{label}</text>')
+            for v in (gl + gp, 0.0, gh - gp):
+                out.append(f'<line x1="{L}" y1="{Yg(v):.1f}" x2="{width - R}" y2="{Yg(v):.1f}" stroke="{line}"/>')
+                out.append(f'<text x="{L - 8}" y="{Yg(v) + 4:.1f}" text-anchor="end" fill="{muted}">{v:+.1f}</text>')
+            out.append(f'<polyline fill="none" stroke="{ink}" stroke-width="1.4" points="' + " ".join(f"{X(x):.1f},{Yg(v):.1f}" for x, v in vals) + '"/>')
+            out.append(f'<text x="{min(X(vals[-1][0]) + 8, width - R - 40):.1f}" y="{Yg(vals[-1][1]) + 4:.1f}" fill="{ink}">{vals[-1][1]:+.1f}</text>')
+    out.append("</svg>")
+    first, last = float(marks[0]["equity"]), float(marks[-1]["equity"])
+    cap = (f"equity first {first:,.2f}, last {last:,.2f}, low {min(float(m['equity']) for m in marks):,.2f}, high {max(float(m['equity']) for m in marks):,.2f}; "
+           f"agent's session P&L at the last mark {float(marks[-1].get('session_pnl', 0)):+.2f} $; position held in {len(held)} of {len(marks)} marks"
+           + ("" if held else " (no position all day: the flat line is the point)"))
+    return "".join(out) + f"<div class='muted'>{esc(cap)}</div>"
 
 
 CSS = """
@@ -116,6 +213,9 @@ def pilot_section(archive: Path) -> str:
            "the fill was 0.147 of the wing, the gate needs 0.15.</div>",
            "<div class='grid'>" + tile("gate evaluations", len(gates)) + tile("positions opened / closed", f"{len(opened)} / {len(closed)}")
            + tile("realised P&L", f"{pnl:+.2f} USD") + tile("halts", len(halts)) + "</div>"]
+    marks = [r for r in recs if r["kind"] == "mark"]
+    if marks:
+        out.append("<div class='wrap'>" + session_chart(marks, opened, closed, first) + "</div>")
     pic = ROOT / "docs" / f"band_price_{first}_pilot.svg"
     if pic.exists():
         out.append("<div class='wrap'>" + pic.read_text(encoding="utf-8") + "</div>")
@@ -213,7 +313,8 @@ def certificate_section(conf_iv: list[dict], conf_eod: list[dict]) -> str:
     return "".join(parts)
 
 
-def build(recs: list[dict], journal: list[dict], account_id: str = "", pilots: list[Path] = ()) -> str:
+def build(recs: list[dict], journal: list[dict], account_id: str = "", pilots: list[Path] = (), refresh: int = 0) -> str:
+    refresh_tag = f'<meta http-equiv="refresh" content="{int(refresh)}">' if refresh else ""
     sessions = sorted({r.get("session") for r in recs if isinstance(r.get("session"), str)})  # conformal_interval carries a session dict
     marks = [r for r in recs if r["kind"] == "mark"]
     opened = [r for r in recs if r["kind"] == "position_opened"]
@@ -252,20 +353,8 @@ def build(recs: list[dict], journal: list[dict], account_id: str = "", pilots: l
     open_now = last_mark.get("open_positions", last_beat.get("open_positions", 0))
     now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
-    # equity sparkline as inline SVG
-    svg = ""
-    if len(eq) >= 2:
-        ys = [e[1] for e in eq]
-        lo, hi = min(ys), max(ys)
-        span = (hi - lo) or 1.0
-        w, h = 720, 120
-        pts = " ".join(f"{i / (len(ys) - 1) * w:.1f},{h - (y - lo) / span * (h - 10) - 5:.1f}" for i, y in enumerate(ys))
-        svg = (f'<svg viewBox="0 0 {w} {h}" width="100%" height="120" role="img" aria-label="equity marks">'
-               f'<polyline fill="none" stroke="currentColor" stroke-width="1.5" points="{pts}"/></svg>'
-               f'<div class="muted">equity marks: first {ys[0]:.2f}, last {ys[-1]:.2f}, min {lo:.2f}, max {hi:.2f} over {len(ys)} marks</div>')
-
     parts = [f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Delphi dashboard</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Delphi dashboard</title>{refresh_tag}
 <style>{CSS}</style></head><body><div class="bar"></div><main>
 <header><h1>Delphi</h1><span class="sub">0DTE SPY iron condor agent on Alpaca paper, conformal risk control, 31 hard gates</span></header>
 <div class="sub">Competition paper account <b>{esc(account_id or 'n/a')}</b>: brand-new, dedicated, $100,000 starting balance, options level 3; only the submitted agent has ever traded on it (from 2026-09-03). The 2026-09-02 pilot ran on a separate development account and is shown at the bottom, labelled.</div>
@@ -279,6 +368,14 @@ def build(recs: list[dict], journal: list[dict], account_id: str = "", pilots: l
 {tile("halts / kill events", f"{len(halts)} / {len(kills)}", "halts stop new risk, kills flatten", "warn" if halts or kills else "")}
 </div>
 """]
+    parts.append("<h2>The account over the day</h2>")
+    if marks:
+        for s in sorted(sessions, reverse=True):
+            sm = [m for m in marks if m.get("session") == s]
+            if sm:
+                parts.append("<div class='wrap'>" + session_chart(sm, [r for r in opened if r.get("session") == s], [r for r in closed if r.get("session") == s], s) + "</div>")
+    else:
+        parts.append("<div class='muted'>no marks yet: the agent writes one every 20 seconds while it runs</div>")
     parts.append(certificate_section(conf_iv, conf_eod))
 
     # ---- the ledger: P versus Q
@@ -344,7 +441,6 @@ def build(recs: list[dict], journal: list[dict], account_id: str = "", pilots: l
     rows = [[r["ts"][:16], r["position_id"], r["reason"], f"{r['entry_credit']:.2f}", f"{r['exit_debit']:.2f}", f"{r['pnl']:+.2f}"] for r in closed]
     if rows:
         parts.append(table(rows, ["closed (UTC)", "id", "reason", "entry", "exit", "P&L $"]))
-    parts.append(f"<h2>Equity</h2>{svg or '<div class=muted>fewer than two marks yet</div>'}")
 
     # ---- LLM
     parts.append("<h2>LLM</h2>")
@@ -414,18 +510,34 @@ def build(recs: list[dict], journal: list[dict], account_id: str = "", pilots: l
     return "".join(parts)
 
 
-def main() -> None:
-    out = Path(sys.argv[sys.argv.index("--out") + 1]) if "--out" in sys.argv else Path("docs/dashboard.html")
+def render(out: Path, account_id: str, refresh: int = 0) -> None:
     recs = load_jsonl(STATE_DIR / "audit.jsonl")
     journal = load_jsonl(STATE_DIR / "journal.jsonl")
+    pilots = sorted(p for p in STATE_DIR.glob("pilot_*") if p.is_dir())
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(build(recs, journal, account_id=account_id, pilots=pilots, refresh=refresh), encoding="utf-8")
+    print("wrote", out, f"({out.stat().st_size} bytes)", flush=True)
+
+
+def main() -> None:
+    """--watch N: regenerate every N seconds and make the page reload itself (a local live view while the agent runs;
+    the published copy is always the plain, self-contained file)."""
+    out = Path(sys.argv[sys.argv.index("--out") + 1]) if "--out" in sys.argv else Path("docs/dashboard.html")
+    watch = int(sys.argv[sys.argv.index("--watch") + 1]) if "--watch" in sys.argv else 0
     import os
     from dotenv import load_dotenv
     load_dotenv(ROOT / ".env")
     account_id = os.environ.get("ALPACA_ACCOUNT_ID", "").strip()
-    pilots = sorted(p for p in STATE_DIR.glob("pilot_*") if p.is_dir())
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(build(recs, journal, account_id=account_id, pilots=pilots), encoding="utf-8")
-    print("wrote", out, f"({out.stat().st_size} bytes)")
+    if not watch:
+        render(out, account_id)
+        return
+    import time
+    while True:
+        try:
+            render(out, account_id, refresh=watch)
+        except Exception as exc:  # keep the live view alive across a half-written audit line
+            print("render failed:", str(exc)[:160], flush=True)
+        time.sleep(watch)
 
 
 if __name__ == "__main__":
